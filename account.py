@@ -106,7 +106,6 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
             await query.edit_message_text(text="Дію скасовано.")
     except Exception as e:
         print(f"Помилка при редагуванні повідомлення: {e}")
-        # Якщо повідомлення не змінилося, просто ігноруємо помилку
 
 async def handle_message(update: Update, context: CallbackContext) -> None:
     user_id = update.message.from_user.id
@@ -233,7 +232,7 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
         users_collection.update_one({"user_id": user_id}, {"$set": {"login": new_login}})
         await update.message.reply_text("Логін успішно змінено!")
         del context.user_data['awaiting_new_login']  # Видаляємо прапор очікування нового логіну
-        
+
 # Функція для надсилання паролю на вказану електронну пошту
 async def send_password_to_user(email: str):
     # Знаходимо користувача в базі даних за електронною поштою
