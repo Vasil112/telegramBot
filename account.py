@@ -1,92 +1,228 @@
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Bot
 from telegram.ext import CallbackContext
 from pymongo import MongoClient
 import random
 import string
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
 # Підключення до MongoDB
-client = MongoClient('mongodb://mongo:YdCyhskWWhVayCaoAkBApdPEbozlaXwE@hopper.proxy.rlwy.net:17259')
+client = MongoClient('mongodb://localhost:27017/')
 db = client['security']
 users_collection = db['users']
+
+BOT_TOKEN = "7699287813:AAEyWJ7LJ9jn_9wvBxV-fQZ_fy1Y-QjeHUU"
+
+SMTP_SERVER = "smtp.gmail.com" 
+SMTP_PORT = 587
+EMAIL_ADDRESS = "oschadbanknotoriginal@gmail.com" 
+EMAIL_PASSWORD = "qclg exwl lcju wslu"  
 
 # Функція для генерації випадкового коду
 def generate_verification_code():
     return ''.join(random.choices(string.digits, k=6))
 
+# Функція для надсилання електронного листа з кодом підтвердження
+def send_verification_email(email: str, code: str):
+    try:
+        msg = MIMEMultipart()
+        msg['From'] = EMAIL_ADDRESS
+        msg['To'] = email
+        msg['Subject'] = "Код підтвердження для входу"
+
+        body = f"Ваш код підтвердження для входу: {code}"
+        msg.attach(MIMEText(body, 'plain'))
+
+        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
+        server.starttls()
+        server.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
+        server.sendmail(EMAIL_ADDRESS, email, msg.as_string())
+        server.quit()
+        return True
+    except Exception as e:
+        print(f"Помилка при надсиланні електронного листа: {e}")
+        return False
+
 async def account(update: Update, context: CallbackContext) -> None:
     user_id = update.message.from_user.id
     user = users_collection.find_one({"user_id": user_id})
 
-    if user:
-        await update.message.reply_text(f"Інформація про ваш акаунт:\nЛогін: {user['login']}\nПароль: {user['password']}")
-    else:
-        # Створення кнопок "Так" і "Ні"
+    if user and user.get('status') == 'active' and not context.user_data.get('logged_out', False):
         keyboard = [
-            [InlineKeyboardButton("Так", callback_data='create_account_yes')],
-            [InlineKeyboardButton("Ні", callback_data='create_account_no')]
+            [InlineKeyboardButton("Редагувати", callback_data='edit_account')],
+            [InlineKeyboardButton("Вихід", callback_data='logout')]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await update.message.reply_text("Акаунт не знайдено. Бажаєте створити новий акаунт?", reply_markup=reply_markup)
+        await update.message.reply_text(
+            f"Інформація про ваш акаунт:\nЛогін: {user['login']}\nЕлектронна пошта: {user['email']}\nКількість товарів у кошику: {user['basket']}\nЗагальна кількість замовлень: {user['all_orders']}",
+            reply_markup=reply_markup
+        )
+    else:
+        keyboard = [
+            [InlineKeyboardButton("Створити новий акаунт", callback_data='create_account_yes')],
+            [InlineKeyboardButton("Вхід", callback_data='login')],
+            [InlineKeyboardButton("Відмінити", callback_data='cancel')]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await update.message.reply_text("Що бажаєте зробити?", reply_markup=reply_markup)
 
 async def button_callback(update: Update, context: CallbackContext) -> None:
     query = update.callback_query
     await query.answer()
 
-    if query.data == 'create_account_yes':
-        await query.edit_message_text(text="Введіть логін:")
-        context.user_data['awaiting_login'] = True  # Позначаємо, що очікуємо логін
-    elif query.data == 'create_account_no':
-        await query.edit_message_text(text="Створення акаунту скасовано.")
+    try:
+        if query.data == 'create_account_yes':
+            await query.edit_message_text(text="Введіть логін:")
+            context.user_data['awaiting_login'] = True  
+        elif query.data == 'create_account_no':
+            await query.edit_message_text(text="Створення акаунту скасовано.")
+        elif query.data == 'login':
+            await query.edit_message_text(text="Введіть ваш логін:")
+            context.user_data['awaiting_login_for_login'] = True  
+        elif query.data == 'edit_account':
+            await query.edit_message_text(text="Введіть ваш пароль для підтвердження:")
+            context.user_data['awaiting_password_for_edit'] = True  
+        elif query.data == 'logout':
+            context.user_data['logged_out'] = True
+            users_collection.update_one({"user_id": query.from_user.id}, {"$set": {"status": "pasive"}})
+            context.user_data.clear()
+            keyboard = [
+                [InlineKeyboardButton("Створити новий акаунт", callback_data='create_account_yes')],
+                [InlineKeyboardButton("Вхід", callback_data='login')],
+                [InlineKeyboardButton("Відмінити", callback_data='cancel')]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text(text="Ви успішно вийшли з акаунту. Що бажаєте зробити?", reply_markup=reply_markup)
+        elif query.data == 'cancel':
+            await query.edit_message_text(text="Дію скасовано.")
+    except Exception as e:
+        print(f"Помилка при редагуванні повідомлення: {e}")
 
 async def handle_message(update: Update, context: CallbackContext) -> None:
     user_id = update.message.from_user.id
+    chat_id = update.message.chat_id  # Отримуємо chat_id користувача
 
     if 'awaiting_login' in context.user_data:
         # Користувач ввів логін
         login = update.message.text
         context.user_data['login'] = login
-        context.user_data['awaiting_password'] = True  # Позначаємо, що очікуємо пароль
-        del context.user_data['awaiting_login']  # Видаляємо прапор очікування логіну
+        context.user_data['awaiting_password'] = True  
+        del context.user_data['awaiting_login']  
         await update.message.reply_text("Введіть пароль:")
     elif 'awaiting_password' in context.user_data:
         # Користувач ввів пароль
         password = update.message.text
         context.user_data['password'] = password
-        context.user_data['awaiting_phone'] = True  # Позначаємо, що очікуємо номер телефону
-        del context.user_data['awaiting_password']  # Видаляємо прапор очікування паролю
-        await update.message.reply_text("Введіть ваш номер телефону:")
-    elif 'awaiting_phone' in context.user_data:
-        # Користувач ввів номер телефону
-        phone = update.message.text
-        context.user_data['phone'] = phone
+        context.user_data['awaiting_email'] = True  
+        del context.user_data['awaiting_password'] 
+        await update.message.reply_text("Введіть вашу електронну пошту:")
+    elif 'awaiting_email' in context.user_data:
+       
+        email = update.message.text
+        context.user_data['email'] = email
 
         # Генеруємо код підтвердження
         verification_code = generate_verification_code()
         context.user_data['verification_code'] = verification_code
 
-        # Надсилаємо код користувачу
-        await update.message.reply_text(f"Код підтвердження: {verification_code}\nВведіть цей код для завершення реєстрації.")
-        context.user_data['awaiting_verification'] = True  # Позначаємо, що очікуємо код підтвердження
-        del context.user_data['awaiting_phone']  # Видаляємо прапор очікування номера телефону
+        # Надсилаємо код на електронну пошту
+        if send_verification_email(email, verification_code):
+            await update.message.reply_text("Код підтвердження надіслано на вашу електронну пошту. Введіть його для завершення реєстрації.")
+            context.user_data['awaiting_verification'] = True  
+            del context.user_data['awaiting_email']  
+        else:
+            await update.message.reply_text("Помилка при надсиланні коду підтвердження. Спробуйте ще раз.")
     elif 'awaiting_verification' in context.user_data:
-        # Користувач ввів код підтвердження
         user_code = update.message.text
         if user_code == context.user_data['verification_code']:
             # Код вірний, зберігаємо акаунт у MongoDB
             users_collection.insert_one({
                 "user_id": user_id,
+                "chat_id": chat_id,  
                 "login": context.user_data['login'],
                 "password": context.user_data['password'],
-                "phone": context.user_data['phone'],
-                "status": "user"
+                "email": context.user_data['email'],  
+                "status": "active",  
+                "basket": 0,
+                "all_orders": 0
             })
 
             await update.message.reply_text("Акаунт успішно створено!")
-            # Очищаємо дані
             del context.user_data['awaiting_verification']
             del context.user_data['verification_code']
             del context.user_data['login']
             del context.user_data['password']
-            del context.user_data['phone']
+            del context.user_data['email']
         else:
             await update.message.reply_text("Невірний код підтвердження. Спробуйте ще раз.")
+    elif 'awaiting_login_for_login' in context.user_data:
+        login = update.message.text
+        user = users_collection.find_one({"login": login})
+        if user:
+            if user.get('status') == 'pasive':
+                await update.message.reply_text("Цей акаунт вимкнено. Введіть пароль для розблокування:")
+                context.user_data['awaiting_password_for_unlock'] = True  
+                context.user_data['login_for_unlock'] = login  
+                del context.user_data['awaiting_login_for_login'] 
+                return
+            context.user_data['login'] = login
+            verification_code = generate_verification_code()
+            context.user_data['verification_code'] = verification_code
+
+            if send_verification_email(user['email'], verification_code):
+                await update.message.reply_text("Код підтвердження надіслано на вашу електронну пошту. Введіть його для входу.")
+                context.user_data['awaiting_verification_for_login'] = True 
+                del context.user_data['awaiting_login_for_login']  
+            else:
+                await update.message.reply_text("Помилка при надсиланні коду підтвердження. Спробуйте ще раз.")
+        else:
+            await update.message.reply_text("Користувача з таким логіном не знайдено.")
+    elif 'awaiting_verification_for_login' in context.user_data:
+
+        user_code = update.message.text
+        if user_code == context.user_data['verification_code']:
+            await update.message.reply_text("Ви успішно увійшли в акаунт!")
+            context.user_data['logged_out'] = False
+            context.user_data['device_verified'] = True  
+            del context.user_data['awaiting_verification_for_login']
+            del context.user_data['verification_code']
+        else:
+            await update.message.reply_text("Невірний код підтвердження. Спробуйте ще раз.")
+    elif 'awaiting_password_for_unlock' in context.user_data:
+
+        password = update.message.text
+        login = context.user_data['login_for_unlock']
+        user = users_collection.find_one({"login": login, "password": password})
+        if user:
+            users_collection.update_one({"login": login}, {"$set": {"status": "active"}})
+            await update.message.reply_text("Акаунт успішно розблоковано! Ви можете увійти.")
+            del context.user_data['awaiting_password_for_unlock']
+            del context.user_data['login_for_unlock']
+        else:
+            await update.message.reply_text("Невірний пароль. Спробуйте ще раз.")
+    elif 'awaiting_password_for_edit' in context.user_data:
+        password = update.message.text
+        user = users_collection.find_one({"user_id": user_id, "password": password})
+        if user:
+            await update.message.reply_text("Введіть новий логін:")
+            context.user_data['awaiting_new_login'] = True  
+            del context.user_data['awaiting_password_for_edit']  
+        else:
+            await update.message.reply_text("Невірний пароль. Спробуйте ще раз.")
+    elif 'awaiting_new_login' in context.user_data:
+        new_login = update.message.text
+        users_collection.update_one({"user_id": user_id}, {"$set": {"login": new_login}})
+        await update.message.reply_text("Логін успішно змінено!")
+        del context.user_data['awaiting_new_login']  
+
+# Функція для надсилання паролю на вказану електронну пошту
+async def send_password_to_user(email: str):
+    user = users_collection.find_one({"email": email})
+    if user:
+        chat_id = user['chat_id']
+        password = user['password']
+        bot = Bot(token=BOT_TOKEN)
+        await bot.send_message(chat_id=chat_id, text=f"Ваш пароль: {password}")
+    else:
+        print("Користувача з такою електронною поштою не знайдено.")
