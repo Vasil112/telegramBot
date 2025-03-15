@@ -145,7 +145,8 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
                 "email": context.user_data['email'],  
                 "status": "active",  
                 "basket": 0,
-                "all_orders": 0
+                "all_orders": 0,
+                "access_level": "user"
             })
 
             await update.message.reply_text("Акаунт успішно створено!")
