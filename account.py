@@ -84,9 +84,9 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
             await query.edit_message_text(text="Введіть ваш пароль для підтвердження:")
             context.user_data['awaiting_password_for_edit'] = True  
         elif query.data == 'logout':
-            context.user_data['logged_out'] = True
+            context.user_data['logged_out'] = True  # Встановлюємо прапорець logged_out
             users_collection.update_one({"user_id": query.from_user.id}, {"$set": {"status": "pasive"}})
-            context.user_data.clear()
+            context.user_data.clear()  # Очищаємо context.user_data
             keyboard = [
                 [InlineKeyboardButton("Створити новий акаунт", callback_data='create_account_yes')],
                 [InlineKeyboardButton("Вхід", callback_data='login')],
@@ -98,6 +98,7 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
             await query.edit_message_text(text="Дію скасовано.")
     except Exception as e:
         print(f"Помилка при редагуванні повідомлення: {e}")
+        
 
 async def handle_message(update: Update, context: CallbackContext) -> None:
     user_id = update.message.from_user.id

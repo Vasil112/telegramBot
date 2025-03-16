@@ -10,6 +10,11 @@ async def status(update: Update, context: CallbackContext, db_security: Database
     user_id = update.message.from_user.id
     user = db_security.users.find_one({"user_id": user_id})  # Використовуємо базу даних security для користувачів
 
+    # Перевіряємо, чи користувач вийшов з акаунту
+    if context.user_data.get('logged_out', False):
+        await update.message.reply_text("У вас немає доступу до цієї команди. Будь ласка, увійдіть у свій акаунт.")
+        return
+
     if user and user.get('access_level') == 'admin':
         keyboard = [
             [InlineKeyboardButton("Додати товар", callback_data='add_product')],
@@ -20,6 +25,7 @@ async def status(update: Update, context: CallbackContext, db_security: Database
         await update.message.reply_text("Оберіть дію:", reply_markup=reply_markup)
     else:
         await update.message.reply_text("У вас немає доступу до цієї команди.")
+        
 
 # Функція для обробки натискання кнопок у /status
 async def button_callback(update: Update, context: CallbackContext, db_security: Database, db_goods: Database) -> None:
@@ -45,11 +51,6 @@ async def button_callback(update: Update, context: CallbackContext, db_security:
         await query.edit_message_text(text="Функція видалення товару ще в розробці.")
     elif query.data == 'edit_product':
         await query.edit_message_text(text="Функція редагування товару ще в розробці.")
-
-# Функція для обробки повідомлень після вибору категорії
-import io
-from bson import ObjectId
-from gridfs import GridFS
 
 # Список характеристик, які треба заповнити
 CHARACTERISTICS_LIST = [
