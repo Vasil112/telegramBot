@@ -33,28 +33,71 @@ async def display_products(update: Update, context: CallbackContext, category: s
         price = product['price']
         description = product['description']
         specs = product.get('specs', {})  # Отримуємо характеристики товару
-        memory = specs.get('internal_memory', 'Немає інформації')  # Внутрішня пам'ять
-        processor = specs.get('processor', 'Немає інформації')  # Процесор
-        screen = specs.get('screen_type', 'Немає інформації')  # Тип екрану
-        camera = specs.get('camera', 'Немає інформації')  #Камера
-        number = product.get('number', 'Немає інформації')  # Кількість товару
+        number = product.get('quantity', 'Немає інформації')  # Кількість у наявності
+
+        # Визначаємо, які характеристики відображати в залежності від категорії
+        if category == "smartphones":
+            memory = specs.get('Внутрішня пам\'ять', 'Немає інформації')
+            processor = specs.get('Процесор', 'Немає інформації')
+            screen = specs.get('Тип екрану', 'Немає інформації')
+            camera = specs.get('Камера', 'Немає інформації')
+
+            # Формуємо підпис для смартфонів
+            caption = (
+                f"📱 **{name}**\n\n"
+                f"💰 Ціна: {price} грн\n\n"
+                f"📜 Опис: {description}\n\n"
+                f"💾 Пам'ять: {memory}\n"
+                f"⚙️ Процесор: {processor}\n"
+                f"🖥️ Екран: {screen}\n"
+                f"📷 Камера: {camera}\n"
+                f"📦 У наявності: {number} ✅"
+            )
+        elif category == "phones":
+            memory = specs.get('Внутрішня пам\'ять', 'Немає інформації')
+            camera = specs.get('Камера', 'Немає інформації')
+            bluetooth = specs.get('Bluetooth', 'Немає інформації')
+
+            # Формуємо підпис для телефонів
+            caption = (
+                f"📱 **{name}**\n\n"
+                f"💰 Ціна: {price} грн\n\n"
+                f"📜 Опис: {description}\n\n"
+                f"💾 Пам'ять: {memory}\n"
+                f"📷 Камера: {camera}\n"
+                f"📶 Bluetooth: {bluetooth}\n"
+                f"📦 У наявності: {number} ✅"
+            )
+        elif category == "iphone":
+            memory = specs.get('Внутрішня пам\'ять', 'Немає інформації')
+            processor = specs.get('Процесор', 'Немає інформації')
+            screen = specs.get('Тип екрану', 'Немає інформації')
+            camera = specs.get('Камера', 'Немає інформації')
+
+            caption = (
+                f"📱 **{name}**\n\n"
+                f"💰 Ціна: {price} грн\n\n"
+                f"📜 Опис: {description}\n\n"
+                f"💾 Пам'ять: {memory}\n"
+                f"⚙️ Процесор: {processor}\n"
+                f"🖥️ Екран: {screen}\n"
+                f"📷 Камера: {camera}\n"
+                f"📦 У наявності: {number} ✅"
+            )
+        else:
+            # Для інших категорій (iphone, watches, accessories) відображаємо лише основні дані
+            caption = (
+                f"📱 **{name}**\n\n"
+                f"💰 Ціна: {price} грн\n\n"
+                f"📜 Опис: {description}\n\n"
+                f"📦 У наявності: {number} ✅"
+            )
 
         # Отримання зображення з GridFS
         image_id = product['photo_id']  # Переконайтеся, що поле називається 'photo_id'
         image = fs.get(ObjectId(image_id)).read()
 
         # Відправка зображення та інформації про товар
-        caption = (
-            f"📱 **{name}**\n\n"
-            f"💰 Ціна: {price} грн\n\n"
-            f"📜 Опис: {description}\n\n"
-            f"💾 Пам'ять: {memory}\n"
-            f"⚙️ Процесор: {processor}\n"
-            f"🖥️ Екран: {screen}\n"
-            f"📷 Камера: {camera}\n"
-            f"📦 У наявності: {number} ✅"
-        )
-
         await update.callback_query.message.reply_photo(photo=io.BytesIO(image), caption=caption)
 
         # Кнопки "Детальніше", "Придбати" та "До кошика"
@@ -72,6 +115,7 @@ async def display_products(update: Update, context: CallbackContext, category: s
     keyboard.append(InlineKeyboardButton("Далі ▶️", callback_data=f"next_{category}"))
     reply_markup = InlineKeyboardMarkup([keyboard])
     await update.callback_query.message.reply_text("Навігація:", reply_markup=reply_markup)
+
 
 async def button_callback(update: Update, context: CallbackContext, db_goods):  # Додано третій аргумент db_goods
     query = update.callback_query
@@ -111,23 +155,48 @@ async def show_product_details(update: Update, context: CallbackContext, product
         price = product['price']
         description = product['description']
         specs = product.get('specs', {})  # Отримуємо характеристики товару
-        memory = specs.get('internal_memory', 'Немає інформації')  # Внутрішня пам'ять
-        processor = specs.get('processor', 'Немає інформації')  # Процесор
-        screen = specs.get('screen_type', 'Немає інформації')  # Тип екрану
+
+        # Визначаємо, які характеристики відображати в залежності від категорії
+        if product.get('category') == "smartphones":
+            memory = specs.get('internal_memory', 'Немає інформації')
+            processor = specs.get('processor', 'Немає інформації')
+            screen = specs.get('screen_type', 'Немає інформації')
+            camera = specs.get('camera', 'Немає інформації')
+
+            caption = (
+                f"**{name}**\n\n"
+                f"Ціна: {price}\n"
+                f"Опис: {description}\n"
+                f"Пам'ять: {memory}\n"
+                f"Процесор: {processor}\n"
+                f"Екран: {screen}\n"
+                f"Камера: {camera}"
+            )
+        elif product.get('category') == "phones":
+            memory = specs.get('internal_memory', 'Немає інформації')
+            camera = specs.get('camera', 'Немає інформації')
+            bluetooth = specs.get('bluetooth', 'Немає інформації')
+
+            caption = (
+                f"**{name}**\n\n"
+                f"Ціна: {price}\n"
+                f"Опис: {description}\n"
+                f"Пам'ять: {memory}\n"
+                f"Камера: {camera}\n"
+                f"Bluetooth: {bluetooth}"
+            )
+        else:
+            caption = (
+                f"**{name}**\n\n"
+                f"Ціна: {price}\n"
+                f"Опис: {description}"
+            )
 
         # Отримання зображення з GridFS
         image_id = product['image_id']
         image = fs.get(ObjectId(image_id)).read()
 
         # Відправка детальної інформації про товар
-        caption = (
-            f"**{name}**\n\n"
-            f"Ціна: {price}\n"
-            f"Опис: {description}\n"
-            f"Пам'ять: {memory}\n"
-            f"Процесор: {processor}\n"
-            f"Екран: {screen}"
-        )
         await update.callback_query.message.reply_photo(photo=io.BytesIO(image), caption=caption)
 
 async def handle_buy_product(update: Update, context: CallbackContext, product_id: str):
