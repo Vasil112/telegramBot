@@ -3,7 +3,7 @@ from bson import ObjectId
 from telegram import Update
 from telegram.ext import CallbackContext
 
-# Підключення до MongoDB
+# Підключення до MongoDB 
 client = MongoClient('mongodb://localhost:27017/')
 db_goods = client['goods']
 db_security = client['security']
