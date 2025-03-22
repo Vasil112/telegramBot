@@ -1,3 +1,4 @@
+import os  # Додано імпорт модуля os
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Bot
 from telegram.ext import CallbackContext
 from pymongo import MongoClient
@@ -99,7 +100,6 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
     except Exception as e:
         print(f"Помилка при редагуванні повідомлення: {e}")
         
-
 async def handle_message(update: Update, context: CallbackContext) -> None:
     user_id = update.message.from_user.id
     chat_id = update.message.chat_id  # Отримуємо chat_id користувача
@@ -119,7 +119,6 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
         del context.user_data['awaiting_password'] 
         await update.message.reply_text("Введіть вашу електронну пошту:")
     elif 'awaiting_email' in context.user_data:
-       
         email = update.message.text
         context.user_data['email'] = email
 
@@ -181,7 +180,6 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
         else:
             await update.message.reply_text("Користувача з таким логіном не знайдено.")
     elif 'awaiting_verification_for_login' in context.user_data:
-
         user_code = update.message.text
         if user_code == context.user_data['verification_code']:
             await update.message.reply_text("Ви успішно увійшли в акаунт!")
@@ -192,7 +190,6 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
         else:
             await update.message.reply_text("Невірний код підтвердження. Спробуйте ще раз.")
     elif 'awaiting_password_for_unlock' in context.user_data:
-
         password = update.message.text
         login = context.user_data['login_for_unlock']
         user = users_collection.find_one({"login": login, "password": password})

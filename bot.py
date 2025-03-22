@@ -1,3 +1,4 @@
+import os  # Додано імпорт модуля os
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackContext, MessageHandler, filters, CallbackQueryHandler
 import admin  # Імпортуємо модуль admin
@@ -44,7 +45,7 @@ async def catalog(update: Update, context: CallbackContext) -> None:
 
     for category_name in categories:
         products = db_goods[category_name].find()  # Використовуємо базу даних goods
-        message += f"**{category_name.capitalize()}**\n"
+        message += f"<b>{category_name.capitalize()}</b>\n"
         for product in products:
             message += f"- {product['name']}: {product['description']}\n"
         message += "\n"
@@ -68,13 +69,12 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
     if query.data in ['create_account_yes', 'create_account_no', 'login', 'edit_account', 'logout', 'cancel']:
         await account.button_callback(update, context)
     # Перевіряємо, чи це кнопка з модуля category
-    elif query.data.startswith(('smartphones', 'phones', 'iphone', 'watches', 'accessories', 'next_', 'detail_')):  # Виправлено опечатку в 'accessories'
+    elif query.data.startswith(('smartphones', 'phones', 'iphone', 'watches', 'accessories', 'next_', 'detail_')):
         await category.button_callback(update, context, db_goods)  # Передаємо db_goods
     # Перевіряємо, чи це кнопка з модуля admin
     elif query.data.startswith(('add_product', 'delete_product', 'edit_product', 'category_')):
         await admin.button_callback(update, context, db_security, db_goods)
 
-        
 # Функція для обробки повідомлень
 async def handle_message(update: Update, context: CallbackContext) -> None:
     # Перевіряємо, чи це повідомлення для модуля account
@@ -105,5 +105,5 @@ def main() -> None:
 
     application.run_polling()
 
-if __name__ == '__main__':
-    main()
+
+main()

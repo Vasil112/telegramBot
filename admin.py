@@ -1,3 +1,4 @@
+import os  # Додано імпорт модуля os
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import CallbackContext
 from pymongo.database import Database
@@ -28,7 +29,6 @@ async def status(update: Update, context: CallbackContext, db_security: Database
         await update.message.reply_text("Будь ласка, увійдіть до свого облікового запису.")
     else:
         await update.message.reply_text("У вас немає доступу до цієї команди.")
-
 
 # Функція для обробки натискання кнопок у /status
 async def button_callback(update: Update, context: CallbackContext, db_security: Database, db_goods: Database) -> None:
@@ -84,7 +84,6 @@ WATCHES_CHARACTERISTICS = [
     "Wi-Fi", "Bluetooth", "NFC", "Наявність камери", "Наявність SIM-карти", "Дзвінки та оповіщення", "Датчики",
     "Функції", "Спосіб зарядки", "Ємність акумулятора", "Форма", "Матеріал корпуса", "Комплектація", "Гарантійний термін"
 ]
-
 
 async def handle_message(update: Update, context: CallbackContext, db_security: Database, db_goods: Database) -> None:
     fs = GridFS(db_goods)  # Ініціалізуємо GridFS для збереження фото
