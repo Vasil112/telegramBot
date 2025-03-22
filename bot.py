@@ -1,8 +1,9 @@
+import os
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackContext, MessageHandler, filters, CallbackQueryHandler
 import admin  # Імпортуємо модуль admin
 import account  # Імпортуємо модуль account
-import category # Імпортуємо модуль category
+import category  # Імпортуємо модуль category
 from pymongo import MongoClient
 from gridfs import GridFS
 
@@ -26,8 +27,8 @@ async def start(update: Update, context: CallbackContext) -> None:
         [InlineKeyboardButton("⌚ Годинники", callback_data='watches')],
         [InlineKeyboardButton("🎧 Аксесуари", callback_data='accessories')]
     ]
-    category = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text('Обери категорію:', reply_markup=category)
+    category_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text('Обери категорію:', reply_markup=category_markup)
 
 async def help(update: Update, context: CallbackContext) -> None:
     clear_user_data(context)
@@ -42,9 +43,9 @@ async def catalog(update: Update, context: CallbackContext) -> None:
     categories = ["accessories", "iphone", "phones", "smartphones", "watches"]
     message = "Ось наш каталог:\n\n"
 
-    for category in categories:
-        products = db_goods[category].find()  # Використовуємо базу даних goods
-        message += f"**{category.capitalize()}**\n"
+    for category_name in categories:
+        products = db_goods[category_name].find()  # Використовуємо базу даних goods
+        message += f"<b>{category_name.capitalize()}</b>\n"
         for product in products:
             message += f"- {product['name']}: {product['description']}\n"
         message += "\n"
@@ -64,13 +65,28 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
     query = update.callback_query
     await query.answer()
 
-    # Передаємо об'єкти баз даних (db_security та db_goods) до функції button_callback у модулі admin
-    await admin.button_callback(update, context, db_security, db_goods)
+    data = query.data
+
+    # Обробка кнопок для модуля account
+    if data in ['create_account_yes', 'create_account_no', 'login', 'edit_account', 'logout', 'cancel']:
+        await account.handle_account_callback(update, context)
+    
+    # Обробка кнопок для модуля category
+    elif data.startswith(('smartphones', 'phones', 'iphone', 'watches', 'accessories', 'next_', 'prev_', 'detail_', 'cart_', 'buy_')):
+        await category.handle_category_callback(update, context, db_goods)
+    
+    # Обробка кнопок для модуля admin
+    elif data.startswith(('add_product', 'delete_product', 'edit_product', 'category_')):
+        await admin.handle_admin_callback(update, context, db_security, db_goods)
 
 # Функція для обробки повідомлень
 async def handle_message(update: Update, context: CallbackContext) -> None:
-    # Передаємо об'єкти баз даних (db_security та db_goods) до функції handle_message у модулі admin
-    await admin.handle_message(update, context, db_security, db_goods)
+    # Перевіряємо, чи це повідомлення для модуля account
+    if 'awaiting_login' in context.user_data or 'awaiting_password' in context.user_data or 'awaiting_email' in context.user_data or 'awaiting_verification' in context.user_data or 'awaiting_login_for_login' in context.user_data or 'awaiting_verification_for_login' in context.user_data or 'awaiting_password_for_unlock' in context.user_data or 'awaiting_password_for_edit' in context.user_data or 'awaiting_new_login' in context.user_data:
+        await account.handle_message(update, context)
+    # Інакше передаємо повідомлення до модуля admin
+    else:
+        await admin.handle_message(update, context, db_security, db_goods)
 
 def main() -> None:
     application = Application.builder().token("7699287813:AAEyWJ7LJ9jn_9wvBxV-fQZ_fy1Y-QjeHUU").build()
@@ -84,20 +100,13 @@ def main() -> None:
     application.add_handler(CommandHandler("status", status))
     application.add_handler(CommandHandler("account", account.account))
 
-    # Додаємо обробники з модуля category ПОТІМ
-    application.add_handler(CallbackQueryHandler(button_callback, pattern="^(add_product|delete_product|edit_product|category_.*)$"))
+    # Додаємо обробник для CallbackQuery (кнопок)
+    application.add_handler(CallbackQueryHandler(button_callback))
 
-    # Додаємо обробники з модуля admin ПЕРШИМИ
-    application.add_handler(CallbackQueryHandler(category.button_callback, pattern="^(smartphones|phones|iphone|watches|accessories|next_.*|detail_.*)$"))  # Використовуємо локальну функцію button_callback
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))  # Використовуємо локальну функцію handle_message
-    application.add_handler(MessageHandler(filters.PHOTO, handle_message))  # Використовуємо локальну функцію handle_message
+    # Додаємо обробник для повідомлень
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    application.add_handler(MessageHandler(filters.PHOTO, handle_message))
 
-
-
-    # Додаємо обробники з модуля account
-    application.add_handler(CallbackQueryHandler(account.button_callback))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, account.handle_message))
     application.run_polling()
 
-if __name__ == '__main__':
-    main()
+main()  

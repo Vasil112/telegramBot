@@ -1,9 +1,12 @@
+import os
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import CallbackContext
 from pymongo import MongoClient
 from gridfs import GridFS
 import io
 from bson import ObjectId
+import details
+from basket import handle_add_to_cart
 
 # Підключення до MongoDB
 client = MongoClient('mongodb://localhost:27017/')
@@ -32,29 +35,92 @@ async def display_products(update: Update, context: CallbackContext, category: s
         name = product['name']
         price = product['price']
         description = product['description']
-        memory = product.get('memory', 'Немає інформації')  # Використовуємо .get() для безпеки
-        processor = product.get('processor', 'Немає інформації')
-        screen = product.get('screen', 'Немає інформації')
+        specs = product.get('specs', {})  # Отримуємо характеристики товару
+        number = product.get('quantity', 'Немає інформації')  # Кількість у наявності
+
+        # Визначаємо, які характеристики відображати в залежності від категорії
+        if category == "smartphones":
+            memory = specs.get('Внутрішня пам\'ять', 'Немає інформації')
+            processor = specs.get('Процесор', 'Немає інформації')
+            screen = specs.get('Тип екрану', 'Немає інформації')
+            camera = specs.get('Камера', 'Немає інформації')
+
+            # Формуємо підпис для смартфонів
+            caption = (
+                f"📱 {name}\n\n"
+                f"💰 Ціна: {price} грн\n\n"
+                f"📜 Опис: {description}\n\n"
+                f"💾 Пам'ять: {memory}\n"
+                f"⚙️ Процесор: {processor}\n"
+                f"🖥️ Екран: {screen}\n"
+                f"📷 Камера: {camera}\n"
+                f"📦 У наявності: {number} ✅"
+            )
+        elif category == "phones":
+            memory = specs.get('Внутрішня пам\'ять', 'Немає інформації')
+            camera = specs.get('Камера', 'Немає інформації')
+            bluetooth = specs.get('Bluetooth', 'Немає інформації')
+
+            # Формуємо підпис для телефонів
+            caption = (
+                f"📱 {name}\n\n"
+                f"💰 Ціна: {price} грн\n\n"
+                f"📜 Опис: {description}\n\n"
+                f"💾 Пам'ять: {memory}\n"
+                f"📷 Камера: {camera}\n"
+                f"📶 Bluetooth: {bluetooth}\n"
+                f"📦 У наявності: {number} ✅"
+            )
+        elif category == "iphone":
+            memory = specs.get('Внутрішня пам\'ять', 'Немає інформації')
+            processor = specs.get('Процесор', 'Немає інформації')
+            screen = specs.get('Тип екрану', 'Немає інформації')
+            camera = specs.get('Камера', 'Немає інформації')
+
+            caption = (
+                f"📱 {name}\n\n"
+                f"💰 Ціна: {price} грн\n\n"
+                f"📜 Опис: {description}\n\n"
+                f"💾 Пам'ять: {memory}\n"
+                f"⚙️ Процесор: {processor}\n"
+                f"🖥️ Екран: {screen}\n"
+                f"📷 Камера: {camera}\n"
+                f"📦 У наявності: {number} ✅"
+            )
+        else:
+            # Для інших категорій (iphone, watches, accessories) відображаємо лише основні дані
+            caption = (
+                f"📱 {name}\n\n"
+                f"💰 Ціна: {price} грн\n\n"
+                f"📜 Опис: {description}\n\n"
+                f"📦 У наявності: {number} ✅"
+            )
 
         # Отримання зображення з GridFS
         image_id = product['photo_id']  # Переконайтеся, що поле називається 'photo_id'
         image = fs.get(ObjectId(image_id)).read()
 
         # Відправка зображення та інформації про товар
-        await update.callback_query.message.reply_photo(photo=io.BytesIO(image), caption=f"**{name}**\n\nЦіна: {price}\nОпис: {description}\nПам'ять: {memory}\nПроцесор: {processor}\nЕкран: {screen}")
+        await update.callback_query.message.reply_photo(photo=io.BytesIO(image), caption=caption)
 
-        # Кнопка "Детальніше"
-        keyboard = [[InlineKeyboardButton("Детальніше", callback_data=f"detail_{product_id}")]]
+        # Кнопки "Детальніше", "Придбати" та "До кошика" для кожного товару
+        keyboard = [
+            [InlineKeyboardButton("Детальніше", callback_data=f"detail_{product_id}_{category}"),
+             InlineKeyboardButton("Придбати", callback_data=f"buy_{product_id}")],
+            [InlineKeyboardButton("До кошика", callback_data=f"cart_{product_id}")]
+        ]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await update.callback_query.message.reply_text("Детальніше:", reply_markup=reply_markup)
+        await update.callback_query.message.reply_text("Оберіть дію:", reply_markup=reply_markup)
 
-    # Кнопка "Далі"
-    keyboard = [[InlineKeyboardButton("Далі", callback_data=f"next_{category}")]]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.callback_query.message.reply_text("Наступна сторінка:", reply_markup=reply_markup)
+    # Кнопки "Назад" та "Далі" для навігації по сторінках
+    keyboard = []
+    if page > 0:
+        keyboard.append(InlineKeyboardButton("◀️ Назад", callback_data=f"prev_{category}"))
+    keyboard.append(InlineKeyboardButton("Далі ▶️", callback_data=f"next_{category}"))
+    reply_markup = InlineKeyboardMarkup([keyboard])
+    await update.callback_query.message.reply_text("Навігація:", reply_markup=reply_markup)
 
-    
-async def button_callback(update: Update, context: CallbackContext):
+async def handle_category_callback(update: Update, context: CallbackContext, db_goods):
     query = update.callback_query
     await query.answer()
 
@@ -68,29 +134,25 @@ async def button_callback(update: Update, context: CallbackContext):
         category = data.split("_")[1]
         current_page[user_id] += 1
         await display_products(update, context, category, user_id)
+    elif data.startswith("prev_"):
+        category = data.split("_")[1]
+        current_page[user_id] -= 1
+        await display_products(update, context, category, user_id)
     elif data.startswith("detail_"):
         product_id = data.split("_")[1]
-        await show_product_details(update, context, product_id)
+        category = data.split("_")[2]  # Отримуємо категорію з callback_data
+        await details.show_product_details(update, context, product_id, category)
+    elif data.startswith("buy_"):
+        product_id = data.split("_")[1]
+        await handle_buy_product(update, context, product_id)
+    elif data.startswith("cart_"):
+        product_id = data.split("_")[1]
+        await handle_add_to_cart(update, context, product_id)
     else:
-        # Якщо це не категорія, next_ чи detail_, ігноруємо
+        # Якщо це не категорія, next_, prev_, detail_, buy_ чи cart_, ігноруємо
         pass
-            
+    
+async def handle_buy_product(update: Update, context: CallbackContext, product_id: str):
+    # Логіка для обробки покупки товару
+    await update.callback_query.message.reply_text(f"Товар {product_id} додано до вашого замовлення.")
 
-async def show_product_details(update: Update, context: CallbackContext, product_id: str):
-    product = db_goods['products'].find_one({"_id": ObjectId(product_id)})
-    if product:
-        name = product['name']
-        price = product['price']
-        description = product['description']
-        memory = product['memory']
-        processor = product['processor']
-        screen = product['screen']
-
-        # Отримання зображення з GridFS
-        image_id = product['image_id']
-        image = fs.get(ObjectId(image_id)).read()
-
-        # Відправка детальної інформації про товар
-        await update.callback_query.message.reply_photo(photo=io.BytesIO(image), caption=f"**{name}**\n\nЦіна: {price}\nОпис: {description}\nПам'ять: {memory}\nПроцесор: {processor}\nЕкран: {screen}")
-
-# Додайте ці обробники до основного коду в bot.py
