@@ -120,7 +120,7 @@ async def display_products(update: Update, context: CallbackContext, category: s
     reply_markup = InlineKeyboardMarkup([keyboard])
     await update.callback_query.message.reply_text("Навігація:", reply_markup=reply_markup)
 
-async def button_callback(update: Update, context: CallbackContext, db_goods):  # Додано третій аргумент db_goods
+async def handle_category_callback(update: Update, context: CallbackContext, db_goods):
     query = update.callback_query
     await query.answer()
 
@@ -151,7 +151,7 @@ async def button_callback(update: Update, context: CallbackContext, db_goods):  
     else:
         # Якщо це не категорія, next_, prev_, detail_, buy_ чи cart_, ігноруємо
         pass
-
+    
 async def handle_buy_product(update: Update, context: CallbackContext, product_id: str):
     # Логіка для обробки покупки товару
     await update.callback_query.message.reply_text(f"Товар {product_id} додано до вашого замовлення.")

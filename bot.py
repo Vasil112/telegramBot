@@ -1,4 +1,4 @@
-import os  # Додано імпорт модуля os
+import os
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackContext, MessageHandler, filters, CallbackQueryHandler
 import admin  # Імпортуємо модуль admin
@@ -65,15 +65,19 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
     query = update.callback_query
     await query.answer()
 
-    # Перевіряємо, чи це кнопка з модуля account
-    if query.data in ['create_account_yes', 'create_account_no', 'login', 'edit_account', 'logout', 'cancel']:
-        await account.button_callback(update, context)
-    # Перевіряємо, чи це кнопка з модуля category
-    elif query.data.startswith(('smartphones', 'phones', 'iphone', 'watches', 'accessories', 'next_', 'detail_')):
-        await category.button_callback(update, context, db_goods)  # Передаємо db_goods
-    # Перевіряємо, чи це кнопка з модуля admin
-    elif query.data.startswith(('add_product', 'delete_product', 'edit_product', 'category_')):
-        await admin.button_callback(update, context, db_security, db_goods)
+    data = query.data
+
+    # Обробка кнопок для модуля account
+    if data in ['create_account_yes', 'create_account_no', 'login', 'edit_account', 'logout', 'cancel']:
+        await account.handle_account_callback(update, context)
+    
+    # Обробка кнопок для модуля category
+    elif data.startswith(('smartphones', 'phones', 'iphone', 'watches', 'accessories', 'next_', 'prev_', 'detail_', 'cart_', 'buy_')):
+        await category.handle_category_callback(update, context, db_goods)
+    
+    # Обробка кнопок для модуля admin
+    elif data.startswith(('add_product', 'delete_product', 'edit_product', 'category_')):
+        await admin.handle_admin_callback(update, context, db_security, db_goods)
 
 # Функція для обробки повідомлень
 async def handle_message(update: Update, context: CallbackContext) -> None:
@@ -105,5 +109,4 @@ def main() -> None:
 
     application.run_polling()
 
-
-main()
+main()  

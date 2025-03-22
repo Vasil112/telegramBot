@@ -31,7 +31,7 @@ async def status(update: Update, context: CallbackContext, db_security: Database
         await update.message.reply_text("У вас немає доступу до цієї команди.")
 
 # Функція для обробки натискання кнопок у /status
-async def button_callback(update: Update, context: CallbackContext, db_security: Database, db_goods: Database) -> None:
+async def handle_admin_callback(update: Update, context: CallbackContext, db_security: Database, db_goods: Database) -> None:
     query = update.callback_query
     await query.answer()
 
@@ -111,7 +111,7 @@ async def handle_message(update: Update, context: CallbackContext, db_security: 
     
     # Отримання кількості товару
     elif 'awaiting_product_quantity' in context.user_data:
-        context.user_data['product_quantity'] = update.message.text
+        context.user_data['product_quantity'] = int(update.message.text) if update.message.text.isdigit() else 0
         context.user_data['product_specs'] = {}  # Створюємо словник характеристик
         context.user_data['current_spec_index'] = 0  # Починаємо з першої характеристики
 

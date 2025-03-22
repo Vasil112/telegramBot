@@ -68,7 +68,7 @@ async def account(update: Update, context: CallbackContext) -> None:
         reply_markup = InlineKeyboardMarkup(keyboard)
         await update.message.reply_text("Що бажаєте зробити?", reply_markup=reply_markup)
 
-async def button_callback(update: Update, context: CallbackContext) -> None:
+async def handle_account_callback(update: Update, context: CallbackContext) -> None:
     query = update.callback_query
     await query.answer()
 
@@ -99,7 +99,7 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
             await query.edit_message_text(text="Дію скасовано.")
     except Exception as e:
         print(f"Помилка при редагуванні повідомлення: {e}")
-        
+                
 async def handle_message(update: Update, context: CallbackContext) -> None:
     user_id = update.message.from_user.id
     chat_id = update.message.chat_id  # Отримуємо chat_id користувача
