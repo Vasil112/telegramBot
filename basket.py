@@ -5,9 +5,10 @@ from telegram.ext import CallbackContext
 
 # Підключення до MongoDB 
 client = MongoClient('mongodb://localhost:27017/')
+db = client['security']  # Використовуємо базу даних security
+basket = db['basket']  # Колекція для кошика
+users = db['users']  # Колекція для користувачів
 db_goods = client['goods']
-db_security = client['security']
-basket_collection = db_security['basket']
 
 async def handle_add_to_cart(update: Update, context: CallbackContext, product_id: str):
     user_id = update.callback_query.from_user.id
@@ -35,18 +36,18 @@ async def handle_add_to_cart(update: Update, context: CallbackContext, product_i
         return
 
     # Перевіряємо, чи товар вже є в кошику користувача
-    existing_item = basket_collection.find_one({"user_id": user_id, "product_id": ObjectId(product_id)})
+    existing_item = basket.find_one({"user_id": user_id, "product_id": ObjectId(product_id)})
     if existing_item:
         # Якщо товар вже є в кошику, збільшуємо кількість
         new_quantity = int(existing_item['quantity']) + 1  # Перетворюємо на int
-        basket_collection.update_one(
+        basket.update_one(
             {"_id": existing_item['_id']},
             {"$set": {"quantity": new_quantity}}
         )
         await update.callback_query.message.reply_text(f"Товар {product_name} вже є у вашому кошику. Кількість збільшено до {new_quantity}.")
     else:
         # Якщо товару немає в кошику, додаємо новий запис
-        basket_collection.insert_one({
+        basket.insert_one({
             "user_id": user_id,
             "product_id": ObjectId(product_id),
             "product_name": product_name,
@@ -54,6 +55,14 @@ async def handle_add_to_cart(update: Update, context: CallbackContext, product_i
             "price": product_price
         })
         await update.callback_query.message.reply_text(f"Товар {product_name} додано до кошика.")
+
+    # Оновлення кількості товарів у кошику користувача
+    user = users.find_one({"user_id": user_id})
+    if user:
+        users.update_one(
+            {"user_id": user_id},
+            {"$inc": {"basket": 1}}  # Збільшуємо кількість товарів у кошику на 1
+        )
 
     # Очищення context.user_data після додавання до кошика
     context.user_data.clear()

@@ -11,7 +11,8 @@ from email.mime.multipart import MIMEMultipart
 # Підключення до MongoDB
 client = MongoClient('mongodb://localhost:27017/')
 db = client['security']
-users_collection = db['users']
+users = db['users']
+basket_collection = client['basket']
 
 BOT_TOKEN = "7699287813:AAEyWJ7LJ9jn_9wvBxV-fQZ_fy1Y-QjeHUU"
 
@@ -47,11 +48,12 @@ def send_verification_email(email: str, code: str):
 
 async def account(update: Update, context: CallbackContext) -> None:
     user_id = update.message.from_user.id
-    user = users_collection.find_one({"user_id": user_id})
+    user = users.find_one({"user_id": user_id})
 
     if user and user.get('status') == 'active' and not context.user_data.get('logged_out', False):
         keyboard = [
             [InlineKeyboardButton("Редагувати", callback_data='edit_account')],
+            [InlineKeyboardButton("Кошик", callback_data='view_basket')],  # Додано кнопку "Кошик"
             [InlineKeyboardButton("Вихід", callback_data='logout')]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -67,6 +69,7 @@ async def account(update: Update, context: CallbackContext) -> None:
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await update.message.reply_text("Що бажаєте зробити?", reply_markup=reply_markup)
+
 
 async def handle_account_callback(update: Update, context: CallbackContext) -> None:
     query = update.callback_query
@@ -86,7 +89,7 @@ async def handle_account_callback(update: Update, context: CallbackContext) -> N
             context.user_data['awaiting_password_for_edit'] = True  
         elif query.data == 'logout':
             context.user_data['logged_out'] = True  # Встановлюємо прапорець logged_out
-            users_collection.update_one({"user_id": query.from_user.id}, {"$set": {"status": "pasive"}})
+            users.update_one({"user_id": query.from_user.id}, {"$set": {"status": "pasive"}})
             context.user_data.clear()  # Очищаємо context.user_data
             keyboard = [
                 [InlineKeyboardButton("Створити новий акаунт", callback_data='create_account_yes')],
@@ -97,9 +100,34 @@ async def handle_account_callback(update: Update, context: CallbackContext) -> N
             await query.edit_message_text(text="Ви успішно вийшли з акаунту. Що бажаєте зробити?", reply_markup=reply_markup)
         elif query.data == 'cancel':
             await query.edit_message_text(text="Дію скасовано.")
+        elif query.data == 'view_basket':  # Обробка кнопки "Кошик"
+            await view_basket(update, context)
     except Exception as e:
         print(f"Помилка при редагуванні повідомлення: {e}")
-                
+
+async def view_basket(update: Update, context: CallbackContext) -> None:
+    user_id = update.callback_query.from_user.id
+    basket_items = basket_collection.find({"user_id": user_id})
+
+    if basket_items.count() == 0:
+        await update.callback_query.message.reply_text("Ваш кошик порожній.")
+        return
+
+    message = "Ваш кошик:\n\n"
+    total_price = 0
+
+    for item in basket_items:
+        product_name = item['product_name']
+        quantity = item['quantity']
+        price = item['price']
+        total_price += int(price) * quantity
+        message += f"📦 {product_name}\nКількість: {quantity}\nЦіна: {price} грн\n\n"
+
+    message += f"Загальна сума: {total_price} грн"
+
+    await update.callback_query.message.reply_text(message)
+
+
 async def handle_message(update: Update, context: CallbackContext) -> None:
     user_id = update.message.from_user.id
     chat_id = update.message.chat_id  # Отримуємо chat_id користувача
@@ -137,7 +165,7 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
         user_code = update.message.text
         if user_code == context.user_data['verification_code']:
             # Код вірний, зберігаємо акаунт у MongoDB
-            users_collection.insert_one({
+            users.insert_one({
                 "user_id": user_id,
                 "chat_id": chat_id,  
                 "login": context.user_data['login'],
@@ -159,7 +187,7 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
             await update.message.reply_text("Невірний код підтвердження. Спробуйте ще раз.")
     elif 'awaiting_login_for_login' in context.user_data:
         login = update.message.text
-        user = users_collection.find_one({"login": login})
+        user = users.find_one({"login": login})
         if user:
             if user.get('status') == 'pasive':
                 await update.message.reply_text("Цей акаунт вимкнено. Введіть пароль для розблокування:")
@@ -192,9 +220,9 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
     elif 'awaiting_password_for_unlock' in context.user_data:
         password = update.message.text
         login = context.user_data['login_for_unlock']
-        user = users_collection.find_one({"login": login, "password": password})
+        user = users.find_one({"login": login, "password": password})
         if user:
-            users_collection.update_one({"login": login}, {"$set": {"status": "active"}})
+            users.update_one({"login": login}, {"$set": {"status": "active"}})
             await update.message.reply_text("Акаунт успішно розблоковано! Ви можете увійти.")
             del context.user_data['awaiting_password_for_unlock']
             del context.user_data['login_for_unlock']
@@ -202,7 +230,7 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
             await update.message.reply_text("Невірний пароль. Спробуйте ще раз.")
     elif 'awaiting_password_for_edit' in context.user_data:
         password = update.message.text
-        user = users_collection.find_one({"user_id": user_id, "password": password})
+        user = users.find_one({"user_id": user_id, "password": password})
         if user:
             await update.message.reply_text("Введіть новий логін:")
             context.user_data['awaiting_new_login'] = True  
@@ -211,13 +239,13 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
             await update.message.reply_text("Невірний пароль. Спробуйте ще раз.")
     elif 'awaiting_new_login' in context.user_data:
         new_login = update.message.text
-        users_collection.update_one({"user_id": user_id}, {"$set": {"login": new_login}})
+        users.update_one({"user_id": user_id}, {"$set": {"login": new_login}})
         await update.message.reply_text("Логін успішно змінено!")
         del context.user_data['awaiting_new_login']  
 
 # Функція для надсилання паролю на вказану електронну пошту
 async def send_password_to_user(email: str):
-    user = users_collection.find_one({"email": email})
+    user = users.find_one({"email": email})
     if user:
         chat_id = user['chat_id']
         password = user['password']
