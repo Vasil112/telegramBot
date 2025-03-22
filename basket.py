@@ -2,6 +2,7 @@ from pymongo import MongoClient
 from bson import ObjectId
 from telegram import Update
 from telegram.ext import CallbackContext
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup 
 
 # Підключення до MongoDB 
 client = MongoClient('mongodb://localhost:27017/')
@@ -9,6 +10,62 @@ db = client['security']  # Використовуємо базу даних secu
 basket = db['basket']  # Колекція для кошика
 users = db['users']  # Колекція для користувачів
 db_goods = client['goods']
+
+
+async def view_basket(update: Update, context: CallbackContext) -> None:
+    user_id = update.callback_query.from_user.id
+    basket_items = list(basket.find({"user_id": user_id}))
+
+    if not basket_items:
+        await update.callback_query.message.reply_text("Ваш кошик порожній.")
+        return
+
+    message = "Ваш кошик:\n\n"
+    total_price = 0
+    keyboard = []
+
+    for item in basket_items:
+        product_name = item['product_name']
+        quantity = item['quantity']
+        price = item['price']
+        total_price += int(price) * quantity
+        message += f"📦 {product_name}\nКількість: {quantity}\nЦіна: {price} грн\n\n"
+
+        # Додаємо кнопку "Видалити" для кожного товару
+        delete_button = InlineKeyboardButton(f"Видалити {product_name}", callback_data=f"delete_{item['_id']}")
+        keyboard.append([delete_button])
+
+    message += f"Загальна сума: {total_price} грн"
+
+    # Додаємо кнопку "До замовлення"
+    order_button = InlineKeyboardButton("До замовлення", callback_data="place_order")
+    keyboard.append([order_button])
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.callback_query.message.reply_text(message, reply_markup=reply_markup)
+    
+async def handle_delete_from_cart(update: Update, context: CallbackContext, item_id: str) -> None:
+    user_id = update.callback_query.from_user.id
+
+    # Видаляємо товар з кошика
+    result = basket.delete_one({"_id": ObjectId(item_id), "user_id": user_id})
+
+    if result.deleted_count > 0:
+        await update.callback_query.message.reply_text("Товар видалено з кошика.")
+        # Оновлюємо кількість товарів у кошику користувача
+        user = users.find_one({"user_id": user_id})
+        if user:
+            users.update_one(
+                {"user_id": user_id},
+                {"$inc": {"basket": -1}}  # Зменшуємо кількість товарів у кошику на 1
+            )
+    else:
+        await update.callback_query.message.reply_text("Не вдалося видалити товар.")
+
+    # Показуємо оновлений кошик
+    await view_basket(update, context)
+
+
 
 async def handle_add_to_cart(update: Update, context: CallbackContext, product_id: str):
     user_id = update.callback_query.from_user.id
@@ -66,3 +123,4 @@ async def handle_add_to_cart(update: Update, context: CallbackContext, product_i
 
     # Очищення context.user_data після додавання до кошика
     context.user_data.clear()
+

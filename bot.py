@@ -4,6 +4,7 @@ from telegram.ext import Application, CommandHandler, CallbackContext, MessageHa
 import admin  # Імпортуємо модуль admin
 import account  # Імпортуємо модуль account
 import category  # Імпортуємо модуль category
+import basket  # Імпортуємо модуль basket
 from pymongo import MongoClient
 from gridfs import GridFS
 
@@ -78,7 +79,20 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
     # Обробка кнопок для модуля admin
     elif data.startswith(('add_product', 'delete_product', 'edit_product', 'category_')):
         await admin.handle_admin_callback(update, context, db_security, db_goods)
-
+    
+    # Обробка кнопки "Кошик"
+    elif data == 'view_basket':
+        await basket.view_basket(update, context)
+    
+    # Обробка кнопки "Видалити" з кошика
+    elif data.startswith("delete_"):
+        item_id = data.split("_")[1]
+        await basket.handle_delete_from_cart(update, context, item_id)
+    
+    # Обробка кнопки "До замовлення"
+    elif data == "place_order":
+        await update.callback_query.message.reply_text("Функція оформлення замовлення ще в розробці.")
+        
 # Функція для обробки повідомлень
 async def handle_message(update: Update, context: CallbackContext) -> None:
     # Перевіряємо, чи це повідомлення для модуля account
