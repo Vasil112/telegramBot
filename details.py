@@ -52,7 +52,7 @@ async def show_product_details(update: Update, context: CallbackContext, product
         # Кнопки "До кошика" та "Придбати"
         keyboard = [
             [InlineKeyboardButton("Придбати", callback_data=f"buy_{product_id}")],
-            [InlineKeyboardButton("До кошика", callback_data=f"cart_{product_id}")]
+            [InlineKeyboardButton("До кошика", callback_data=f"cart_{product_id}")] 
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await update.callback_query.message.reply_text("Оберіть дію:", reply_markup=reply_markup)
