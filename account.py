@@ -7,6 +7,7 @@ import string
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from basket import basket
 
 # Підключення до MongoDB
 client = MongoClient('mongodb://localhost:27017/')
@@ -50,6 +51,11 @@ async def account(update: Update, context: CallbackContext) -> None:
     user_id = update.message.from_user.id
     user = users.find_one({"user_id": user_id})
 
+    # Оновлюємо кількість товарів у кошику перед виведенням інформації
+    if user:
+        basket_count = basket.count_documents({"user_id": user_id})
+        users.update_one({"user_id": user_id}, {"$set": {"basket": basket_count}})
+
     if user and user.get('status') == 'active' and not context.user_data.get('logged_out', False):
         keyboard = [
             [InlineKeyboardButton("Редагувати", callback_data='edit_account')],
@@ -69,7 +75,7 @@ async def account(update: Update, context: CallbackContext) -> None:
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await update.message.reply_text("Що бажаєте зробити?", reply_markup=reply_markup)
-
+        
 
 async def handle_account_callback(update: Update, context: CallbackContext) -> None:
     query = update.callback_query

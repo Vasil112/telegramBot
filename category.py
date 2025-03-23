@@ -7,6 +7,7 @@ import io
 from bson import ObjectId
 import details
 from basket import handle_add_to_cart
+import basket
 
 # Підключення до MongoDB
 client = MongoClient('mongodb://localhost:27017/')
@@ -150,13 +151,16 @@ async def handle_category_callback(update: Update, context: CallbackContext, db_
     elif data.startswith("buy_"):
         if user_status == 'active':
             product_id = data.split("_")[1]
-            await handle_buy_product(update, context, product_id)
+            # Додаємо товар до кошика
+            await basket.handle_add_to_cart(update, context, product_id)
+            # Показуємо меню підтвердження замовлення
+            await basket.handle_place_order(update, context)
         else:
             await query.message.reply_text("Для виконання цієї операції спочатку потрібно створити акаунт.")
     elif data.startswith("cart_"):
         if user_status == 'active':
             product_id = data.split("_")[1]
-            await handle_add_to_cart(update, context, product_id)
+            await basket.handle_add_to_cart(update, context, product_id)
         else:
             await query.message.reply_text("Для виконання цієї операції спочатку потрібно створити акаунт.")
     else:
