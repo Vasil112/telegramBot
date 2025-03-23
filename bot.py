@@ -76,6 +76,10 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
     elif data.startswith(('smartphones', 'phones', 'iphone', 'watches', 'accessories', 'next_', 'prev_', 'detail_', 'cart_', 'buy_')):
         await category.handle_category_callback(update, context, db_goods)
     
+    # Обробка кнопок для вибору категорії при редагуванні
+    elif data.startswith("edit_category_"):
+        await admin.handle_category_selection(update, context)
+
     # Обробка кнопок для модуля admin
     elif data.startswith(('add_product', 'delete_product', 'edit_product', 'category_')):
         await admin.handle_admin_callback(update, context, db_security, db_goods)
@@ -96,7 +100,8 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
     # Обробка підтвердження замовлення
     elif data in ["confirm_order", "cancel_order"]:
         await basket.handle_order_confirmation(update, context)
-                
+
+
 # Функція для обробки повідомлень
 async def handle_message(update: Update, context: CallbackContext) -> None:
     # Перевіряємо, чи це повідомлення для модуля account

@@ -166,8 +166,3 @@ async def handle_category_callback(update: Update, context: CallbackContext, db_
     else:
         # Якщо це не категорія, next_, prev_, detail_, buy_ чи cart_, ігноруємо
         pass
-
-async def handle_buy_product(update: Update, context: CallbackContext, product_id: str):
-    # Логіка для обробки покупки товару
-    await update.callback_query.message.reply_text(f"Товар {product_id} додано до вашого замовлення.")
-
