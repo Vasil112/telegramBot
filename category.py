@@ -12,6 +12,7 @@ from basket import handle_add_to_cart
 client = MongoClient('mongodb://localhost:27017/')
 db_goods = client['goods']  # База даних для товарів
 fs = GridFS(db_goods)
+db_security = client['security']
 
 # Змінна для зберігання поточної сторінки
 current_page = {}
@@ -127,6 +128,10 @@ async def handle_category_callback(update: Update, context: CallbackContext, db_
     user_id = query.from_user.id
     data = query.data
 
+    # Отримуємо статус користувача
+    user = db_security.users.find_one({"user_id": user_id})
+    user_status = user.get('status', 'pasive') if user else 'pasive'
+
     # Перевіряємо, чи callback_data стосується категорій
     if data in ["accessories", "iphone", "phones", "smartphones", "watches"]:
         await show_category(update, context, data)
@@ -143,15 +148,21 @@ async def handle_category_callback(update: Update, context: CallbackContext, db_
         category = data.split("_")[2]  # Отримуємо категорію з callback_data
         await details.show_product_details(update, context, product_id, category)
     elif data.startswith("buy_"):
-        product_id = data.split("_")[1]
-        await handle_buy_product(update, context, product_id)
+        if user_status == 'active':
+            product_id = data.split("_")[1]
+            await handle_buy_product(update, context, product_id)
+        else:
+            await query.message.reply_text("Для виконання цієї операції спочатку потрібно створити акаунт.")
     elif data.startswith("cart_"):
-        product_id = data.split("_")[1]
-        await handle_add_to_cart(update, context, product_id)
+        if user_status == 'active':
+            product_id = data.split("_")[1]
+            await handle_add_to_cart(update, context, product_id)
+        else:
+            await query.message.reply_text("Для виконання цієї операції спочатку потрібно створити акаунт.")
     else:
         # Якщо це не категорія, next_, prev_, detail_, buy_ чи cart_, ігноруємо
         pass
-    
+
 async def handle_buy_product(update: Update, context: CallbackContext, product_id: str):
     # Логіка для обробки покупки товару
     await update.callback_query.message.reply_text(f"Товар {product_id} додано до вашого замовлення.")

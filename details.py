@@ -9,6 +9,7 @@ from basket import handle_add_to_cart
 # Підключення до MongoDB
 client = MongoClient('mongodb://localhost:27017/')
 db_goods = client['goods']  # База даних для товарів
+db_security = client['security']
 fs = GridFS(db_goods)
 
 async def show_product_details(update: Update, context: CallbackContext, product_id: str, category: str):
@@ -49,12 +50,28 @@ async def show_product_details(update: Update, context: CallbackContext, product
         # Відправка текстового опису з підтримкою HTML-розмітки
         await update.callback_query.message.reply_text(caption, parse_mode="HTML")
 
+        # Отримуємо статус користувача
+        user_id = update.callback_query.from_user.id
+        user = db_security.users.find_one({"user_id": user_id})
+        user_status = user.get('status', 'pasive') if user else 'pasive'
+
         # Кнопки "До кошика" та "Придбати"
-        keyboard = [
-            [InlineKeyboardButton("Придбати", callback_data=f"buy_{product_id}")],
-            [InlineKeyboardButton("До кошика", callback_data=f"cart_{product_id}")] 
-        ]
+        if user_status == 'active':
+            keyboard = [
+                [InlineKeyboardButton("Придбати", callback_data=f"buy_{product_id}")],
+                [InlineKeyboardButton("До кошика", callback_data=f"cart_{product_id}")]
+            ]
+        else:
+            keyboard = [
+                [InlineKeyboardButton("Придбати", callback_data="not_active")],
+                [InlineKeyboardButton("До кошика", callback_data="not_active")]
+            ]
+
         reply_markup = InlineKeyboardMarkup(keyboard)
         await update.callback_query.message.reply_text("Оберіть дію:", reply_markup=reply_markup)
+
+        # Обробка натискання кнопок, якщо статус користувача не активний
+        if user_status != 'active':
+            await update.callback_query.message.reply_text("Для виконання цієї операції спочатку потрібно створити акаунт.")
     else:
         await update.callback_query.message.reply_text("Товар не знайдено.")
