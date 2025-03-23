@@ -75,7 +75,7 @@ async def account(update: Update, context: CallbackContext) -> None:
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await update.message.reply_text("Що бажаєте зробити?", reply_markup=reply_markup)
-        
+
 
 async def handle_account_callback(update: Update, context: CallbackContext) -> None:
     query = update.callback_query
@@ -180,7 +180,8 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
                 "status": "active",  
                 "basket": 0,
                 "all_orders": 0,
-                "access_level": "user"
+                "access_level": "user",
+                "status_user": 0
             })
 
             await update.message.reply_text("Акаунт успішно створено!")
