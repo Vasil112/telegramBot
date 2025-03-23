@@ -11,7 +11,6 @@ basket = db['basket']  # Колекція для кошика
 users = db['users']  # Колекція для користувачів
 db_goods = client['goods']
 
-
 async def view_basket(update: Update, context: CallbackContext) -> None:
     user_id = update.callback_query.from_user.id
     basket_items = list(basket.find({"user_id": user_id}))
@@ -64,8 +63,6 @@ async def handle_delete_from_cart(update: Update, context: CallbackContext, item
 
     # Показуємо оновлений кошик
     await view_basket(update, context)
-
-
 
 async def handle_add_to_cart(update: Update, context: CallbackContext, product_id: str):
     user_id = update.callback_query.from_user.id
@@ -124,3 +121,41 @@ async def handle_add_to_cart(update: Update, context: CallbackContext, product_i
     # Очищення context.user_data після додавання до кошика
     context.user_data.clear()
 
+async def handle_place_order(update: Update, context: CallbackContext) -> None:
+    user_id = update.callback_query.from_user.id
+    basket_items = list(basket.find({"user_id": user_id}))
+
+    if not basket_items:
+        await update.callback_query.message.reply_text("Ваш кошик порожній.")
+        return
+
+    # Формуємо список товарів у кошику
+    message = "Ваш кошик:\n\n"
+    total_price = 0
+    for item in basket_items:
+        product_name = item['product_name']
+        quantity = item['quantity']
+        price = item['price']
+        total_price += int(price) * quantity
+        message += f"📦 {product_name}\nКількість: {quantity}\nЦіна: {price} грн\n\n"
+
+    message += f"Загальна сума: {total_price} грн\n\nБажаєте продовжити?"
+
+    # Кнопки "Так" і "Ні"
+    keyboard = [
+        [InlineKeyboardButton("Так", callback_data="confirm_order")],
+        [InlineKeyboardButton("Ні", callback_data="cancel_order")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.callback_query.message.reply_text(message, reply_markup=reply_markup)
+
+async def handle_order_confirmation(update: Update, context: CallbackContext) -> None:
+    query = update.callback_query
+    await query.answer()
+
+    data = query.data
+
+    if data == "confirm_order":
+        await query.message.reply_text("Функція оформлення замовлення ще в розробці.")
+    elif data == "cancel_order":
+        await query.message.reply_text("Операцію скасовано. Товари залишаються у вашому кошику.")

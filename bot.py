@@ -91,8 +91,12 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
     
     # Обробка кнопки "До замовлення"
     elif data == "place_order":
-        await update.callback_query.message.reply_text("Функція оформлення замовлення ще в розробці.")
-        
+        await basket.handle_place_order(update, context)
+    
+    # Обробка підтвердження замовлення
+    elif data in ["confirm_order", "cancel_order"]:
+        await basket.handle_order_confirmation(update, context)
+                
 # Функція для обробки повідомлень
 async def handle_message(update: Update, context: CallbackContext) -> None:
     # Перевіряємо, чи це повідомлення для модуля account
