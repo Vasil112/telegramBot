@@ -3,6 +3,7 @@ from bson import ObjectId
 from telegram import Update
 from telegram.ext import CallbackContext
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup 
+import services
 
 # Підключення до MongoDB 
 client = MongoClient('mongodb://localhost:27017/')
@@ -11,7 +12,7 @@ basket = db['basket']  # Колекція для кошика
 users = db['users']  # Колекція для користувачів
 db_goods = client['goods']
 
-__all__ = ['basket', 'users', 'db_goods', 'view_basket', 'handle_delete_from_cart', 'handle_add_to_cart', 'handle_place_order', 'handle_order_confirmation']
+__all__ = ['basket', 'users', 'db_goods', 'view_basket', 'handle_delete_from_cart', 'handle_add_to_cart', 'handle_place_order', 'handle_order_confirmation', 'services']
 
 async def view_basket(update: Update, context: CallbackContext) -> None:
     user_id = update.callback_query.from_user.id
@@ -151,17 +152,6 @@ async def handle_place_order(update: Update, context: CallbackContext) -> None:
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.callback_query.message.reply_text(message, reply_markup=reply_markup)
 
-async def handle_order_confirmation(update: Update, context: CallbackContext) -> None:
-    query = update.callback_query
-    await query.answer()
-
-    data = query.data
-
-    if data == "confirm_order":
-        await query.message.reply_text("Функція оформлення замовлення ще в розробці.")
-    elif data == "cancel_order":
-        await query.message.reply_text("Операцію скасовано. Товари залишаються у вашому кошику.")
-        
 async def handle_place_order(update: Update, context: CallbackContext) -> None:
     user_id = update.callback_query.from_user.id
     basket_items = list(basket.find({"user_id": user_id}))
@@ -197,6 +187,7 @@ async def handle_order_confirmation(update: Update, context: CallbackContext) ->
     data = query.data
 
     if data == "confirm_order":
-        await query.message.reply_text("Функція оформлення замовлення ще в розробці.")
+        # Пропонуємо сервіс "Full Protection"
+        await services.offer_full_protection(update, context)
     elif data == "cancel_order":
         await query.message.reply_text("Операцію скасовано. Товари залишаються у вашому кошику.")

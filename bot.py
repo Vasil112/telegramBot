@@ -5,6 +5,8 @@ import admin  # Імпортуємо модуль admin
 import account  # Імпортуємо модуль account
 import category  # Імпортуємо модуль category
 import basket  # Імпортуємо модуль basket
+import services  # Імпортуємо модуль services
+import history  # Імпортуємо модуль history
 from pymongo import MongoClient
 from gridfs import GridFS
 
@@ -100,6 +102,10 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
     # Обробка підтвердження замовлення
     elif data in ["confirm_order", "cancel_order"]:
         await basket.handle_order_confirmation(update, context)
+    
+    # Обробка вибору сервісу "Full Protection"
+    elif data.startswith("full_protection_") or data == "no_protection":
+        await services.handle_protection_choice(update, context)
 
 
 # Функція для обробки повідомлень
@@ -131,5 +137,7 @@ def main() -> None:
     application.add_handler(MessageHandler(filters.PHOTO, handle_message))
 
     application.run_polling()
+
+    history.setup_handlers(application)
 
 main()  
