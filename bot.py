@@ -7,6 +7,7 @@ import category  # Імпортуємо модуль category
 import basket  # Імпортуємо модуль basket
 import services  # Імпортуємо модуль services
 import history  # Імпортуємо модуль history
+import oplata # Імпортуємо модуль oplata
 from pymongo import MongoClient
 from gridfs import GridFS
 
@@ -124,6 +125,13 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
     elif data.startswith("use_saved_data_"):
         await history.handle_use_saved_data_decision(update, context)
 
+    elif data.startswith("verify_payment_"):
+        await oplata.verify_payment(update, context)
+    elif data == "payment_instructions":
+        await oplata.payment_instructions(update, context)
+    elif data == "payment_prepay":
+        await oplata.handle_monobank_payment(update, context)
+
 
 async def handle_manage_address(update: Update, context: CallbackContext) -> None:
     query = update.callback_query
@@ -198,8 +206,10 @@ def main() -> None:
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     application.add_handler(MessageHandler(filters.PHOTO, handle_message))
 
-
+    # Додаємо обробники для платежів
+    oplata.setup_handlers(application)
     history.setup_handlers(application)
+
     application.run_polling()
 
 main()  

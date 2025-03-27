@@ -4,6 +4,7 @@ from pymongo import MongoClient
 from bson import ObjectId
 from datetime import datetime
 import re
+from oplata import handle_monobank_payment
 
 # Підключення до MongoDB
 client = MongoClient('mongodb://localhost:27017/')
@@ -180,7 +181,7 @@ async def handle_phone_for_save(update: Update, context: CallbackContext) -> Non
             del context.user_data[key]
     
     await ask_for_payment_method(update, context)
-    
+
 async def ask_for_full_name(update: Update, context: CallbackContext) -> None:
     await context.bot.send_message(
         chat_id=update.effective_chat.id,
@@ -242,11 +243,16 @@ async def handle_payment(update: Update, context: CallbackContext) -> None:
     if not context.user_data.get('awaiting_payment'):
         return
     
-    payment_method = "Передоплата" if query.data == "payment_prepay" else "Оплата при отриманні"
-    context.user_data['payment_method'] = payment_method
+    payment_method = query.data
+    context.user_data['payment_method'] = "Передоплата" if payment_method == "payment_prepay" else "Оплата при отриманні"
     del context.user_data['awaiting_payment']
     
-    await complete_order(update, context)
+    if payment_method == "payment_prepay":
+        # Для передоплати - переходимо до процесу оплати
+        await handle_monobank_payment(update, context)
+    else:
+        # Для оплати при отриманні - завершуємо замовлення
+        await complete_order(update, context)
 
 async def complete_order(update: Update, context: CallbackContext) -> None:
     user_id = update.effective_user.id
