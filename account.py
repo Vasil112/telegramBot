@@ -14,6 +14,7 @@ client = MongoClient('mongodb://localhost:27017/')
 db = client['security']
 users = db['users']
 basket_collection = client['basket']
+user_addresses = db['user_addresses']
 
 BOT_TOKEN = "7699287813:AAEyWJ7LJ9jn_9wvBxV-fQZ_fy1Y-QjeHUU"
 
@@ -55,16 +56,23 @@ async def account(update: Update, context: CallbackContext) -> None:
     if user:
         basket_count = basket.count_documents({"user_id": user_id})
         users.update_one({"user_id": user_id}, {"$set": {"basket": basket_count}})
+        
+        # Отримуємо адреси користувача
+        addresses = list(user_addresses.find({"user_id": user_id}))
+        address_info = "\n".join([f"📍 {addr['address']}" for addr in addresses]) if addresses else "Не вказано"
 
     if user and user.get('status') == 'active' and not context.user_data.get('logged_out', False):
         keyboard = [
             [InlineKeyboardButton("Редагувати", callback_data='edit_account')],
-            [InlineKeyboardButton("Кошик", callback_data='view_basket')],  # Додано кнопку "Кошик"
+            [InlineKeyboardButton("Кошик", callback_data='view_basket')],
+            [InlineKeyboardButton("Адреса", callback_data='manage_address')],  # Нова кнопка
             [InlineKeyboardButton("Вихід", callback_data='logout')]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await update.message.reply_text(
-            f"Інформація про ваш акаунт:\nЛогін: {user['login']}\nЕлектронна пошта: {user['email']}\nКількість товарів у кошику: {user['basket']}\nЗагальна кількість замовлень: {user['all_orders']}",
+            f"Інформація про ваш акаунт:\nЛогін: {user['login']}\nEmail: {user['email']}\n"
+            f"Кількість товарів у кошику: {user['basket']}\n"
+            f"Збережені адреси:\n{address_info}",
             reply_markup=reply_markup
         )
     else:
@@ -94,9 +102,9 @@ async def handle_account_callback(update: Update, context: CallbackContext) -> N
             await query.edit_message_text(text="Введіть ваш пароль для підтвердження:")
             context.user_data['awaiting_password_for_edit'] = True  
         elif query.data == 'logout':
-            context.user_data['logged_out'] = True  # Встановлюємо прапорець logged_out
+            context.user_data['logged_out'] = True
             users.update_one({"user_id": query.from_user.id}, {"$set": {"status": "pasive"}})
-            context.user_data.clear()  # Очищаємо context.user_data
+            context.user_data.clear()
             keyboard = [
                 [InlineKeyboardButton("Створити новий акаунт", callback_data='create_account_yes')],
                 [InlineKeyboardButton("Вхід", callback_data='login')],
@@ -106,10 +114,35 @@ async def handle_account_callback(update: Update, context: CallbackContext) -> N
             await query.edit_message_text(text="Ви успішно вийшли з акаунту. Що бажаєте зробити?", reply_markup=reply_markup)
         elif query.data == 'cancel':
             await query.edit_message_text(text="Дію скасовано.")
-        elif query.data == 'view_basket':  # Обробка кнопки "Кошик"
+        elif query.data == 'view_basket':
             await view_basket(update, context)
+        elif query.data == 'manage_address':
+            await handle_manage_address(update, context)
+        elif query.data == 'add_new_address':  # Додано обробник для кнопки "Додати адресу"
+            await query.message.reply_text("Введіть нову адресу доставки:")
+            context.user_data['order_flow'] = 'awaiting_address'
     except Exception as e:
         print(f"Помилка при редагуванні повідомлення: {e}")
+        
+async def handle_manage_address(update: Update, context: CallbackContext) -> None:
+    query = update.callback_query
+    await query.answer()
+    
+    user_id = query.from_user.id
+    addresses = list(user_addresses.find({"user_id": user_id}))
+    
+    if addresses:
+        message = "Ваші збережені адреси:\n\n" + "\n".join([f"📍 {addr['address']}" for addr in addresses])
+        keyboard = [
+            [InlineKeyboardButton("Додати нову адресу", callback_data="add_new_address")],
+            [InlineKeyboardButton("Видалити адресу", callback_data="delete_address")]
+        ]
+    else:
+        message = "У вас немає збережених адрес."
+        keyboard = [[InlineKeyboardButton("Додати адресу", callback_data="add_new_address")]]
+    
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await query.message.reply_text(message, reply_markup=reply_markup)
 
 async def view_basket(update: Update, context: CallbackContext) -> None:
     user_id = update.callback_query.from_user.id

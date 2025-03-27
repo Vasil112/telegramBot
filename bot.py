@@ -15,6 +15,7 @@ client = MongoClient('mongodb://localhost:27017/')
 db_security = client['security']  # База даних для користувачів
 db_goods = client['goods']  # База даних для товарів
 fs = GridFS(db_goods)
+user_addresses = db_security['user_addresses']  # Колекція для адрес користувачів
 
 # Функція для очищення context.user_data
 def clear_user_data(context: CallbackContext):
@@ -106,14 +107,52 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
     # Обробка вибору сервісу "Full Protection"
     elif data.startswith("full_protection_") or data == "no_protection":
         await services.handle_protection_choice(update, context)
+    
+    elif data == 'manage_address':
+        await handle_manage_address(update, context)
 
+    elif data == "confirm_final_order":
+        await history.confirm_final_order(update, context)
+    elif data == "add_new_address":
+        await history.handle_address_selection(update, context)
+    elif data.startswith("select_address_"):
+        await history.handle_address_selection(update, context)
+    elif data.startswith("save_address_"):
+        await history.handle_address_save_decision(update, context)
+    elif data.startswith("payment_"):
+        await history.handle_payment(update, context)
+
+
+async def handle_manage_address(update: Update, context: CallbackContext) -> None:
+    query = update.callback_query
+    await query.answer()
+    
+    user_id = query.from_user.id
+    addresses = list(user_addresses.find({"user_id": user_id}))
+    
+    if addresses:
+        message = "Ваші збережені адреси:\n\n" + "\n".join([f"📍 {addr['address']}" for addr in addresses])
+        keyboard = [
+            [InlineKeyboardButton("Додати нову адресу", callback_data="add_new_address")],
+            [InlineKeyboardButton("Видалити адресу", callback_data="delete_address")]
+        ]
+    else:
+        message = "У вас немає збережених адрес."
+        keyboard = [[InlineKeyboardButton("Додати адресу", callback_data="add_new_address")]]
+    
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await query.message.reply_text(message, reply_markup=reply_markup)
 
 # Функція для обробки повідомлень
 async def handle_message(update: Update, context: CallbackContext) -> None:
-    # Перевіряємо, чи це повідомлення для модуля account
-    if 'awaiting_login' in context.user_data or 'awaiting_password' in context.user_data or 'awaiting_email' in context.user_data or 'awaiting_verification' in context.user_data or 'awaiting_login_for_login' in context.user_data or 'awaiting_verification_for_login' in context.user_data or 'awaiting_password_for_unlock' in context.user_data or 'awaiting_password_for_edit' in context.user_data or 'awaiting_new_login' in context.user_data:
+    # Спочатку перевіряємо, чи очікується адреса
+    if context.user_data.get('awaiting_address'):
+        await history.handle_address(update, context)
+        return
+    
+    # Потім інші перевірки для account
+    elif ('awaiting_login' in context.user_data or ...):
         await account.handle_message(update, context)
-    # Інакше передаємо повідомлення до модуля admin
     else:
         await admin.handle_message(update, context, db_security, db_goods)
 
@@ -136,8 +175,8 @@ def main() -> None:
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     application.add_handler(MessageHandler(filters.PHOTO, handle_message))
 
-    application.run_polling()
 
     history.setup_handlers(application)
+    application.run_polling()
 
 main()  

@@ -3,6 +3,7 @@ from telegram.ext import CallbackContext, MessageHandler, filters, CallbackQuery
 from pymongo import MongoClient
 from bson import ObjectId
 from datetime import datetime
+import re
 
 # Підключення до MongoDB
 client = MongoClient('mongodb://localhost:27017/')
@@ -10,104 +11,205 @@ db = client['security']
 orders = db['orders']
 basket = db['basket']
 users = db['users']
+user_addresses = db['user_addresses']
 
 async def confirm_final_order(update: Update, context: CallbackContext) -> None:
     query = update.callback_query
     await query.answer()
     
-    # Запитуємо адресу
-    await query.message.reply_text("Введіть адресу замовлення (наприклад: місто Київ, вулиця Богдана Хмельницького 57, Нова пошта відділення №1):")
+    user_id = query.from_user.id
+    addresses = list(user_addresses.find({"user_id": user_id}))
     
-    # Зберігаємо стан для наступного кроку
-    context.user_data['order_flow'] = 'awaiting_address'
+    if addresses:
+        keyboard = [
+            [InlineKeyboardButton(addr['address'], callback_data=f"select_address_{str(addr['_id'])}")]
+            for addr in addresses
+        ]
+        keyboard.append([InlineKeyboardButton("➕ Додати нову адресу", callback_data="add_new_address")])
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.message.reply_text("Оберіть адресу доставки:", reply_markup=reply_markup)
+    else:
+        await query.message.reply_text("Введіть адресу замовлення (наприклад: місто Київ, вулиця Богдана Хмельницького 57, Нова пошта відділення №1):")
+        context.user_data['awaiting_address'] = True
+
+async def handle_address_selection(update: Update, context: CallbackContext) -> None:
+    query = update.callback_query
+    await query.answer()
+    
+    if query.data == "add_new_address":
+        await query.message.reply_text("Введіть нову адресу доставки:")
+        context.user_data['awaiting_address'] = True
+        return
+    
+    try:
+        address_id = query.data.split("_")[-1]
+        address = user_addresses.find_one({"_id": ObjectId(address_id)})
+        if address:
+            context.user_data['order_address'] = address['address']
+            await ask_for_full_name(update, context)
+    except Exception as e:
+        print(f"Помилка при обробці адреси: {e}")
+        await query.message.reply_text("Сталася помилка при обробці адреси. Спробуйте ще раз.")
 
 async def handle_address(update: Update, context: CallbackContext) -> None:
-    if context.user_data.get('order_flow') != 'awaiting_address':
+    if not context.user_data.get('awaiting_address'):
         return
     
-    address = update.message.text
+    address = update.message.text.strip()
+    if not address:
+        await update.message.reply_text("Будь ласка, введіть коректну адресу")
+        return
+    
     context.user_data['order_address'] = address
+    del context.user_data['awaiting_address']
     
-    # Запитуємо ПІБ
-    await update.message.reply_text("Введіть Ваш ПІБ:")
-    context.user_data['order_flow'] = 'awaiting_name'
-
-async def handle_name(update: Update, context: CallbackContext) -> None:
-    if context.user_data.get('order_flow') != 'awaiting_name':
-        return
-    
-    full_name = update.message.text
-    context.user_data['order_name'] = full_name
-    
-    # Запитуємо спосіб оплати
+    # Пропонуємо зберегти адресу
     keyboard = [
-        [InlineKeyboardButton("Передоплата", callback_data="payment_prepay")],
-        [InlineKeyboardButton("При отриманні", callback_data="payment_cod")]
+        [InlineKeyboardButton("✅ Так, зберегти", callback_data="save_address_yes")],
+        [InlineKeyboardButton("❌ Ні, не зберігати", callback_data="save_address_no")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    await update.message.reply_text(
-        "Оберіть спосіб оплати:",
+    await update.message.reply_text("Бажаєте зберегти цю адресу для майбутніх замовлень?", reply_markup=reply_markup)
+    context.user_data['awaiting_address_save'] = True
+
+async def handle_address_save_decision(update: Update, context: CallbackContext) -> None:
+    query = update.callback_query
+    await query.answer()
+    
+    if not context.user_data.get('awaiting_address_save'):
+        return
+    
+    user_id = query.from_user.id
+    address = context.user_data.get('order_address', '')
+    
+    if query.data == "save_address_yes":
+        user_addresses.insert_one({
+            "user_id": user_id,
+            "address": address,
+            "created_at": datetime.now()
+        })
+        await query.message.reply_text("✅ Адресу збережено!")
+    
+    del context.user_data['awaiting_address_save']
+    await ask_for_full_name(update, context)
+
+async def ask_for_full_name(update: Update, context: CallbackContext) -> None:
+    await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text="Введіть Ваш ПІБ у форматі: Прізвище Ім'я По-батькові (наприклад: Іванов Іван Іванович):"
+    )
+    context.user_data['awaiting_full_name'] = True
+
+async def handle_full_name(update: Update, context: CallbackContext) -> None:
+    if not context.user_data.get('awaiting_full_name'):
+        return
+    
+    full_name = update.message.text.strip()
+    if not re.match(r'^[А-ЯҐЄІЇ][а-яґєії]+\s[А-ЯҐЄІЇ][а-яґєії]+\s[А-ЯҐЄІЇ][а-яґєії]+$', full_name):
+        await update.message.reply_text("Будь ласка, введіть ПІБ у правильному форматі: Прізвище Ім'я По-батькові")
+        return
+    
+    context.user_data['order_full_name'] = full_name
+    del context.user_data['awaiting_full_name']
+    await ask_for_phone_number(update, context)
+
+async def ask_for_phone_number(update: Update, context: CallbackContext) -> None:
+    await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text="Введіть Ваш номер телефону у форматі +380XXXXXXXXX:"
+    )
+    context.user_data['awaiting_phone'] = True
+
+async def handle_phone_number(update: Update, context: CallbackContext) -> None:
+    if not context.user_data.get('awaiting_phone'):
+        return
+    
+    phone = update.message.text.strip()
+    if not re.match(r'^\+380\d{9}$', phone):
+        await update.message.reply_text("Будь ласка, введіть номер у форматі +380XXXXXXXXX")
+        return
+    
+    context.user_data['order_phone'] = phone
+    del context.user_data['awaiting_phone']
+    await ask_for_payment_method(update, context)
+
+async def ask_for_payment_method(update: Update, context: CallbackContext) -> None:
+    keyboard = [
+        [InlineKeyboardButton("Передоплата", callback_data="payment_prepay")],
+        [InlineKeyboardButton("Оплата при отриманні", callback_data="payment_cod")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text="Оберіть спосіб оплати:",
         reply_markup=reply_markup
     )
-    context.user_data['order_flow'] = 'awaiting_payment'
+    context.user_data['awaiting_payment'] = True
 
 async def handle_payment(update: Update, context: CallbackContext) -> None:
     query = update.callback_query
     await query.answer()
     
-    if context.user_data.get('order_flow') != 'awaiting_payment':
+    if not context.user_data.get('awaiting_payment'):
         return
     
-    payment_method = "Передоплата" if query.data == "payment_prepay" else "При отриманні"
+    payment_method = "Передоплата" if query.data == "payment_prepay" else "Оплата при отриманні"
+    context.user_data['payment_method'] = payment_method
+    del context.user_data['awaiting_payment']
     
-    # Отримуємо всі дані
-    user_id = query.from_user.id
-    address = context.user_data.get('order_address', 'Не вказано')
-    full_name = context.user_data.get('order_name', 'Не вказано')
-    
-    # Отримуємо товари з кошика
-    basket_items = list(basket.find({"user_id": user_id}))
-    
-    # Розраховуємо загальну суму
-    total_price = sum(int(item['price']) * item['quantity'] for item in basket_items)
-    
-    # Створюємо запис про замовлення
+    await complete_order(update, context)
+
+async def complete_order(update: Update, context: CallbackContext) -> None:
+    user_id = update.effective_user.id
     order_data = {
         "user_id": user_id,
-        "items": basket_items,
-        "total_price": total_price,
-        "address": address,
-        "full_name": full_name,
-        "payment_method": payment_method,
+        "items": list(basket.find({"user_id": user_id})),
+        "address": context.user_data.get('order_address', ''),
+        "full_name": context.user_data.get('order_full_name', ''),
+        "phone": context.user_data.get('order_phone', ''),
+        "payment_method": context.user_data.get('payment_method', ''),
         "status": "Нове",
         "order_date": datetime.now()
     }
+    
+    # Розраховуємо загальну суму
+    total_price = sum(item['price'] * item['quantity'] for item in order_data['items'])
+    order_data['total_price'] = total_price
+    
+    # Зберігаємо замовлення
     orders.insert_one(order_data)
     
     # Очищаємо кошик
     basket.delete_many({"user_id": user_id})
     
-    # Оновлюємо кількість товарів у кошику користувача
-    users.update_one({"user_id": user_id}, {"$set": {"basket": 0}})
-    
-    # Надсилаємо фінальне повідомлення
-    await query.message.reply_text(
-        "Чудово! Замовлення оформлене.\n\n"
-        f"Деталі замовлення:\n"
-        f"ПІБ: {full_name}\n"
-        f"Адреса: {address}\n"
-        f"Спосіб оплати: {payment_method}\n"
-        f"Загальна сума: {total_price} грн\n\n"
-        "На вашу пошту надіслано квитанцію про покупку."
+    # Надсилаємо підтвердження
+    await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text=f"""✅ Замовлення оформлено!
+        
+📋 Деталі замовлення:
+👤 ПІБ: {order_data['full_name']}
+📞 Телефон: {order_data['phone']}
+🏠 Адреса: {order_data['address']}
+💳 Спосіб оплати: {order_data['payment_method']}
+💰 Загальна сума: {total_price} грн
+
+Дякуємо за замовлення!"""
     )
     
-    # Очищаємо дані про замовлення
+    # Очищаємо тимчасові дані
     context.user_data.clear()
 
 def setup_handlers(application):
-    # Додаємо обробники для кожної стадії оформлення
+    # Обробники кнопок
     application.add_handler(CallbackQueryHandler(confirm_final_order, pattern="^confirm_final_order$"))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_address))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_name))
+    application.add_handler(CallbackQueryHandler(handle_address_selection, pattern="^select_address_|^add_new_address$"))
+    application.add_handler(CallbackQueryHandler(handle_address_save_decision, pattern="^save_address_"))
     application.add_handler(CallbackQueryHandler(handle_payment, pattern="^payment_"))
+    
+    # Обробники повідомлень
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r'.*адреса.*'), handle_address))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r'^[А-ЯҐЄІЇ][а-яґєії]+\s[А-ЯҐЄІЇ][а-яґєії]+\s[А-ЯҐЄІЇ][а-яґєії]+$'), handle_full_name))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r'^\+380\d{9}$'), handle_phone_number))
