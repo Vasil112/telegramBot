@@ -71,7 +71,7 @@ async def handle_protection_choice(update: Update, context: CallbackContext) -> 
     else:
         parts = data.split('_')
         duration = parts[2]
-        price = parts[3]
+        price = int(parts[3])
         
         # Додаємо послугу до кошика
         user_id = query.from_user.id
@@ -79,7 +79,7 @@ async def handle_protection_choice(update: Update, context: CallbackContext) -> 
             "user_id": user_id,
             "product_name": f"Full Protection ({duration} місяців)",
             "price": price,
-            "quantity": 1,
+            "quantity": int(1),
             "is_protection": True
         })
         

@@ -109,7 +109,7 @@ async def handle_add_to_cart(update: Update, context: CallbackContext, product_i
             "product_id": ObjectId(product_id),
             "product_name": product_name,
             "quantity": int(1),  # Переконуємося, що це int
-            "price": product_price
+            "price": int(product_price)
         })
         await update.callback_query.message.reply_text(f"Товар {product_name} додано до кошика.")
 

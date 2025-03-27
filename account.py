@@ -71,8 +71,7 @@ async def account(update: Update, context: CallbackContext) -> None:
         reply_markup = InlineKeyboardMarkup(keyboard)
         await update.message.reply_text(
             f"Інформація про ваш акаунт:\nЛогін: {user['login']}\nEmail: {user['email']}\n"
-            f"Кількість товарів у кошику: {user['basket']}\n"
-            f"Збережені адреси:\n{address_info}",
+            f"Кількість товарів у кошику: {user['basket']}\n",
             reply_markup=reply_markup
         )
     else:

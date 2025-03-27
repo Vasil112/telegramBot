@@ -121,6 +121,8 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
         await history.handle_address_save_decision(update, context)
     elif data.startswith("payment_"):
         await history.handle_payment(update, context)
+    elif data.startswith("use_saved_data_"):
+        await history.handle_use_saved_data_decision(update, context)
 
 
 async def handle_manage_address(update: Update, context: CallbackContext) -> None:
@@ -150,11 +152,32 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
         await history.handle_address(update, context)
         return
     
+    # Перевіряємо, чи очікується PІБ для збереження
+    elif context.user_data.get('awaiting_full_name_for_save'):
+        await history.handle_full_name_for_save(update, context)
+        return
+    
+    # Перевіряємо, чи очікується PІБ для замовлення
+    elif context.user_data.get('awaiting_full_name'):
+        await history.handle_full_name(update, context)
+        return
+    
+    # Перевіряємо, чи очікується номер телефону для збереження
+    elif context.user_data.get('awaiting_phone_for_save'):
+        await history.handle_phone_for_save(update, context)
+        return
+    
+    # Перевіряємо, чи очікується номер телефону для замовлення
+    elif context.user_data.get('awaiting_phone'):
+        await history.handle_phone_number(update, context)
+        return
+    
     # Потім інші перевірки для account
     elif ('awaiting_login' in context.user_data or ...):
         await account.handle_message(update, context)
     else:
         await admin.handle_message(update, context, db_security, db_goods)
+
 
 def main() -> None:
     application = Application.builder().token("7699287813:AAEyWJ7LJ9jn_9wvBxV-fQZ_fy1Y-QjeHUU").build()

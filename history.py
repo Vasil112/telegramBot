@@ -46,10 +46,37 @@ async def handle_address_selection(update: Update, context: CallbackContext) -> 
         address = user_addresses.find_one({"_id": ObjectId(address_id)})
         if address:
             context.user_data['order_address'] = address['address']
-            await ask_for_full_name(update, context)
+            context.user_data['order_full_name'] = address.get('full_name', '')
+            context.user_data['order_phone'] = address.get('phone', '')
+            
+            # Якщо в базі вже є ПІБ і телефон, пропонуємо їх використати
+            if address.get('full_name') and address.get('phone'):
+                keyboard = [
+                    [InlineKeyboardButton("✅ Використати збережені дані", callback_data="use_saved_data_yes")],
+                    [InlineKeyboardButton("❌ Ввести нові дані", callback_data="use_saved_data_no")]
+                ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                await query.message.reply_text(
+                    f"Використати збережені дані?\nПІБ: {address['full_name']}\nТелефон: {address['phone']}",
+                    reply_markup=reply_markup
+                )
+                context.user_data['awaiting_data_decision'] = True
+            else:
+                await ask_for_full_name(update, context)
     except Exception as e:
         print(f"Помилка при обробці адреси: {e}")
         await query.message.reply_text("Сталася помилка при обробці адреси. Спробуйте ще раз.")
+
+async def handle_use_saved_data_decision(update: Update, context: CallbackContext) -> None:
+    query = update.callback_query
+    await query.answer()
+    
+    if query.data == "use_saved_data_yes":
+        await ask_for_payment_method(update, context)
+    else:
+        await ask_for_full_name(update, context)
+    
+    del context.user_data['awaiting_data_decision']
 
 async def handle_address(update: Update, context: CallbackContext) -> None:
     if not context.user_data.get('awaiting_address'):
@@ -63,14 +90,14 @@ async def handle_address(update: Update, context: CallbackContext) -> None:
     context.user_data['order_address'] = address
     del context.user_data['awaiting_address']
     
-    # Пропонуємо зберегти адресу
+    # Пропонуємо зберегти адресу разом з іншими даними
     keyboard = [
         [InlineKeyboardButton("✅ Так, зберегти", callback_data="save_address_yes")],
         [InlineKeyboardButton("❌ Ні, не зберігати", callback_data="save_address_no")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    await update.message.reply_text("Бажаєте зберегти цю адресу для майбутніх замовлень?", reply_markup=reply_markup)
+    await update.message.reply_text("Бажаєте зберегти цю адресу разом з вашими даними для майбутніх замовлень?", reply_markup=reply_markup)
     context.user_data['awaiting_address_save'] = True
 
 async def handle_address_save_decision(update: Update, context: CallbackContext) -> None:
@@ -84,16 +111,76 @@ async def handle_address_save_decision(update: Update, context: CallbackContext)
     address = context.user_data.get('order_address', '')
     
     if query.data == "save_address_yes":
-        user_addresses.insert_one({
-            "user_id": user_id,
-            "address": address,
-            "created_at": datetime.now()
-        })
-        await query.message.reply_text("✅ Адресу збережено!")
-    
-    del context.user_data['awaiting_address_save']
-    await ask_for_full_name(update, context)
+        # Запитуємо ПІБ та телефон для збереження разом з адресою
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text="Для збереження адреси введіть Ваш ПІБ у форматі: Прізвище Ім'я По-батькові (наприклад: Іванов Іван Іванович):"
+        )
+        context.user_data['awaiting_full_name_for_save'] = True
+        context.user_data['address_to_save'] = address
+    else:
+        del context.user_data['awaiting_address_save']
+        await ask_for_full_name(update, context)
 
+async def handle_full_name_for_save(update: Update, context: CallbackContext) -> None:
+    if not context.user_data.get('awaiting_full_name_for_save'):
+        return
+    
+    full_name = update.message.text.strip()
+    if not re.match(r'^[А-ЯҐЄІЇ][а-яґєії]+\s[А-ЯҐЄІЇ][а-яґєії]+\s[А-ЯҐЄІЇ][а-яґєії]+$', full_name):
+        await update.message.reply_text("Будь ласка, введіть ПІБ у правильному форматі: Прізвище Ім'я По-батькові")
+        return
+    
+    context.user_data['full_name_to_save'] = full_name
+    del context.user_data['awaiting_full_name_for_save']
+    
+    await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text="Введіть Ваш номер телефону у форматі +380XXXXXXXXX для збереження:"
+    )
+    context.user_data['awaiting_phone_for_save'] = True
+
+async def handle_phone_for_save(update: Update, context: CallbackContext) -> None:
+    if not context.user_data.get('awaiting_phone_for_save'):
+        return
+    
+    phone = update.message.text.strip()
+    if not re.match(r'^\+380\d{9}$', phone):
+        await update.message.reply_text("Будь ласка, введіть номер у форматі +380XXXXXXXXX")
+        return
+    
+    # Отримуємо дані перед їх видаленням
+    full_name = context.user_data.get('full_name_to_save', '')
+    address = context.user_data.get('address_to_save', '')
+    
+    # Зберігаємо адресу разом з ПІБ та телефоном
+    user_addresses.insert_one({
+        "user_id": update.effective_user.id,
+        "address": address,
+        "full_name": full_name,
+        "phone": phone,
+        "created_at": datetime.now()
+    })
+    
+    await update.message.reply_text("✅ Адресу та ваші дані збережено!")
+    
+    # Встановлюємо збережені дані для поточного замовлення
+    context.user_data['order_full_name'] = full_name
+    context.user_data['order_phone'] = phone
+    
+    # Очищаємо тимчасові дані
+    keys_to_delete = [
+        'awaiting_phone_for_save',
+        'address_to_save',
+        'full_name_to_save',
+        'awaiting_address_save'
+    ]
+    for key in keys_to_delete:
+        if key in context.user_data:
+            del context.user_data[key]
+    
+    await ask_for_payment_method(update, context)
+    
 async def ask_for_full_name(update: Update, context: CallbackContext) -> None:
     await context.bot.send_message(
         chat_id=update.effective_chat.id,
@@ -175,7 +262,7 @@ async def complete_order(update: Update, context: CallbackContext) -> None:
     }
     
     # Розраховуємо загальну суму
-    total_price = sum(item['price'] * item['quantity'] for item in order_data['items'])
+    total_price = sum(float(item['price']) * int(item['quantity']) for item in order_data['items'])
     order_data['total_price'] = total_price
     
     # Зберігаємо замовлення
@@ -207,9 +294,12 @@ def setup_handlers(application):
     application.add_handler(CallbackQueryHandler(confirm_final_order, pattern="^confirm_final_order$"))
     application.add_handler(CallbackQueryHandler(handle_address_selection, pattern="^select_address_|^add_new_address$"))
     application.add_handler(CallbackQueryHandler(handle_address_save_decision, pattern="^save_address_"))
+    application.add_handler(CallbackQueryHandler(handle_use_saved_data_decision, pattern="^use_saved_data_"))
     application.add_handler(CallbackQueryHandler(handle_payment, pattern="^payment_"))
     
     # Обробники повідомлень
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r'.*адреса.*'), handle_address))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_address))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_full_name_for_save))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_phone_for_save))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r'^[А-ЯҐЄІЇ][а-яґєії]+\s[А-ЯҐЄІЇ][а-яґєії]+\s[А-ЯҐЄІЇ][а-яґєії]+$'), handle_full_name))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r'^\+380\d{9}$'), handle_phone_number))
