@@ -35,15 +35,34 @@ async def handle_monobank_payment(update: Update, context: CallbackContext) -> N
         await query.message.reply_text("Ваш кошик порожній!")
         return
     
+    # Отримуємо дані користувача (якщо вони є в user_data)
+    full_name = context.user_data.get('full_name', 'Не вказано')
+    phone = context.user_data.get('phone', 'Не вказано')
+    address = context.user_data.get('address', 'Не вказано')
+
     # Розраховуємо загальну суму
     total_price = sum(float(item['price']) * int(item['quantity']) for item in basket_items)
     amount_kopiyky = int(total_price * 100)  # Конвертуємо в копійки
     
-    # Перевірка мінімальної суми (не менше 1 грн = 100 копійок)
     if amount_kopiyky < 100:
         await query.message.reply_text("Мінімальна сума оплати - 1 грн")
         return
     
+    # 1️⃣ Спочатку створюємо замовлення
+    order_data = {
+        "user_id": user_id,
+        "full_name": full_name,
+        "phone": phone,
+        "address": address,
+        "items": basket_items,
+        "total_price": total_price,
+        "status": "Очікує оплати",
+        "payment_method": "Monobank",
+        "created_at": datetime.now()
+    }
+    order = orders.insert_one(order_data)
+    order_id = order.inserted_id  # Отримуємо ID нового замовлення
+        
     # Створюємо інвойс в Monobank
     invoice_data = {
         "amount": amount_kopiyky,
@@ -60,32 +79,18 @@ async def handle_monobank_payment(update: Update, context: CallbackContext) -> N
     }
     
     try:
-        headers = {
-            "X-Token": MONOBANK_MERCHANT_TOKEN,
-            "Content-Type": "application/json"
-        }
-    
-        
         response = requests.post(
             f"{MONOBANK_API_URL}/api/merchant/invoice/create",
-            json=invoice_data,  # Використовуємо параметр json замість data
-            headers=headers,
-            timeout=10
+            json=invoice_data,
+            headers={"X-Token": MONOBANK_MERCHANT_TOKEN}
         )
-        
-        
-        response.raise_for_status()  # Це викличе виняток для статусів 4xx/5xx
-        
+        response.raise_for_status()
         invoice_info = response.json()
         
-        # Перевірка обов'язкових полів у відповіді
-        if 'invoiceId' not in invoice_info or 'pageUrl' not in invoice_info:
-            raise ValueError("Неочікувана відповідь від Monobank API")
-        
-        # Зберігаємо інформацію про платеж
         payment_record = {
             "user_id": user_id,
             "payment_id": invoice_info['invoiceId'],
+            "order_id": order_id,  # Додаємо ID замовлення
             "amount": total_price,
             "status": "pending",
             "created_at": datetime.now(),
@@ -94,7 +99,7 @@ async def handle_monobank_payment(update: Update, context: CallbackContext) -> N
             "order_reference": invoice_data['merchantPaymInfo']['reference']
         }
         payments.insert_one(payment_record)
-        
+            
         # Відправляємо повідомлення з реквізитами
         message = f"""
 💳 *Оплата через Monobank*
