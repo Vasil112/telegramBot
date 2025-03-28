@@ -1,4 +1,3 @@
-# oplata.py
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import CallbackContext, CallbackQueryHandler
 from pymongo import MongoClient
@@ -9,11 +8,15 @@ import time
 import os
 from bson import ObjectId
 
+from dotenv import load_dotenv
+import os
+load_dotenv()  # Завантажує змінні з .env
+
 to_date = int(time.time())  # Поточний час
 from_date = to_date - 86400  # Мінус 24 години
 
 # Підключення до MongoDB
-client = MongoClient('mongodb://localhost:27017/')
+client = MongoClient(os.getenv("MONGO_URI"))
 db = client['security']
 orders = db['orders']
 payments = db['payments']
@@ -21,8 +24,8 @@ basket_collection = db['basket']  # Перейменуємо, щоб уникн�
 
 # Налаштування Monobank API
 MONOBANK_API_URL = "https://api.monobank.ua"
-MONOBANK_MERCHANT_TOKEN = "uxknxd8adVw1__oXS0CDXVQcnkwOIG4uk0CYYT74_TYg"  #! Виправлено - використовуємо змінну оточення
-MONOBANK_CARD = "4441 1111 3737 2219"  # Ваш номер картки Monobank
+MONOBANK_MERCHANT_TOKEN = os.getenv("MONOBANK_MERCHANT_TOKEN")  #! Виправлено - використовуємо змінну оточення
+MONOBANK_CARD = os.getenv("MONOBANK_CARD")  # Ваш номер картки Monobank
 
 async def handle_monobank_payment(update: Update, context: CallbackContext) -> None:
     query = update.callback_query
@@ -99,7 +102,7 @@ async def handle_monobank_payment(update: Update, context: CallbackContext) -> N
             "order_reference": invoice_data['merchantPaymInfo']['reference']
         }
         payments.insert_one(payment_record)
-            
+
         # Відправляємо повідомлення з реквізитами
         message = f"""
 💳 *Оплата через Monobank*

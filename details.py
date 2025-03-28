@@ -6,8 +6,12 @@ import io
 from bson import ObjectId
 from basket import handle_add_to_cart
 
+from dotenv import load_dotenv
+import os
+load_dotenv()  # Завантажує змінні з .env
+
 # Підключення до MongoDB
-client = MongoClient('mongodb://localhost:27017/')
+client = MongoClient(os.getenv("MONGO_URI"))
 db_goods = client['goods']  # База даних для товарів
 db_security = client['security']
 fs = GridFS(db_goods)

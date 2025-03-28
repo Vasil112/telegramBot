@@ -5,8 +5,12 @@ from telegram.ext import CallbackContext
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup 
 import services
 
+from dotenv import load_dotenv
+import os
+load_dotenv()  # Завантажує змінні з .env
+
 # Підключення до MongoDB 
-client = MongoClient('mongodb://localhost:27017/')
+client = MongoClient(os.getenv("MONGO_URI"))
 db = client['security']  # Використовуємо базу даних security
 basket = db['basket']  # Колекція для кошика
 users = db['users']  # Колекція для користувачів

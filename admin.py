@@ -6,6 +6,10 @@ import io
 from bson import ObjectId
 from gridfs import GridFS
 
+from dotenv import load_dotenv
+import os
+load_dotenv()  # Завантажує змінні з .env
+
 # Списки характеристик для різних категорій
 SMARTPHONES_CHARACTERISTICS = [
     "Кількість sim-карт", "Стандарти зв'язку", "Діагональ екрану", "Роздільна здатність дисплея",

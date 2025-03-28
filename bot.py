@@ -11,8 +11,14 @@ import oplata # Імпортуємо модуль oplata
 from pymongo import MongoClient
 from gridfs import GridFS
 
+from dotenv import load_dotenv
+import os
+
+load_dotenv() # Завантажує змінні з .env файлу
+
+
 # Підключення до MongoDB
-client = MongoClient('mongodb://localhost:27017/')
+client = MongoClient(os.getenv("MONGO_URI"))
 db_security = client['security']  # База даних для користувачів
 db_goods = client['goods']  # База даних для товарів
 fs = GridFS(db_goods)
@@ -188,7 +194,7 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
 
 
 def main() -> None:
-    application = Application.builder().token("7699287813:AAEyWJ7LJ9jn_9wvBxV-fQZ_fy1Y-QjeHUU").build()
+    application = Application.builder().token(os.getenv("BOT_TOKEN")).build()
 
     # Додаємо обробники команд
     application.add_handler(CommandHandler("start", start))

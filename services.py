@@ -3,7 +3,11 @@ from telegram.ext import CallbackContext
 from pymongo import MongoClient
 from bson import ObjectId
 
-client = MongoClient('mongodb://localhost:27017/')
+from dotenv import load_dotenv
+import os
+load_dotenv()  # Завантажує змінні з .env
+
+client = MongoClient(os.getenv("MONGO_URI"))
 db_security = client['security']
 db_goods = client['goods']
 basket = db_security['basket']

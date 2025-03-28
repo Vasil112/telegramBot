@@ -6,8 +6,12 @@ from datetime import datetime
 import re
 from oplata import handle_monobank_payment
 
+from dotenv import load_dotenv
+import os
+load_dotenv()  # Завантажує змінні з .env
+
 # Підключення до MongoDB
-client = MongoClient('mongodb://localhost:27017/')
+client = MongoClient(os.getenv("MONGO_URI"))
 db = client['security']
 orders = db['orders']
 basket = db['basket']

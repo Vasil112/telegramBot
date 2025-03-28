@@ -9,19 +9,22 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from basket import basket
 
+from dotenv import load_dotenv
+import os
+load_dotenv()  # Завантажує змінні з .env
+
 # Підключення до MongoDB
-client = MongoClient('mongodb://localhost:27017/')
+client = MongoClient(os.getenv("MONGO_URI"))
 db = client['security']
 users = db['users']
 basket_collection = client['basket']
 user_addresses = db['user_addresses']
 
-BOT_TOKEN = "7699287813:AAEyWJ7LJ9jn_9wvBxV-fQZ_fy1Y-QjeHUU"
-
-SMTP_SERVER = "smtp.gmail.com" 
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+SMTP_SERVER = os.getenv("SMTP_SERVER")
 SMTP_PORT = 587
-EMAIL_ADDRESS = "oschadbanknotoriginal@gmail.com" 
-EMAIL_PASSWORD = "qclg exwl lcju wslu"  
+EMAIL_ADDRESS = os.getenv("EMAIL_ADDRESS")
+EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
 
 # Функція для генерації випадкового коду
 def generate_verification_code():
