@@ -75,9 +75,18 @@ async def status(update: Update, context: CallbackContext, db_security: Database
 # Функція для обробки натискання кнопок у /status
 async def handle_admin_callback(update: Update, context: CallbackContext, db_security: Database, db_goods: Database) -> None:
     query = update.callback_query
-    await query.answer()  # Підтверджуємо отримання callback
-
+    await query.answer()
+    
+    print(f"\n--- BUTTON PRESSED ---")
+    print(f"Button data: {query.data}")
+    print(f"Current user_data BEFORE: {context.user_data}")
+    
     if query.data == 'add_product':
+        # Очищаємо та ініціалізуємо user_data
+        context.user_data.clear()
+        context.user_data['admin_action'] = 'add_product'
+        print(f"user_data AFTER add_product: {context.user_data}")
+        
         await query.edit_message_text(text="Оберіть категорію для нового товару:")
         categories_keyboard = [
             [InlineKeyboardButton("🎧 Аксесуари", callback_data='category_accessories')],
@@ -88,17 +97,23 @@ async def handle_admin_callback(update: Update, context: CallbackContext, db_sec
         ]
         reply_markup = InlineKeyboardMarkup(categories_keyboard)
         await query.edit_message_reply_markup(reply_markup=reply_markup)
+    
     elif query.data.startswith('category_'):
-        # Обробка вибору категорії
-        category = query.data.split('_')[1]  # Отримуємо назву категорії
-        context.user_data['category'] = category  # Зберігаємо категорію в контексті
+        if 'admin_action' not in context.user_data or context.user_data['admin_action'] != 'add_product':
+            await query.edit_message_text("Помилка: не почато процес додавання товару")
+            return
+            
+        category = query.data.split('_')[1]
+        context.user_data.update({
+            'category': category,
+            'awaiting_product_name': True,
+            'current_step': 'name'
+        })
+        print(f"user_data AFTER category select: {context.user_data}")
+        
         await query.edit_message_text(text=f"✅ Ви обрали категорію: {category}\nВведіть назву товару:")
-        context.user_data['awaiting_product_name'] = True  # Очікуємо введення назви товару
-    elif query.data == 'delete_product':
-        await query.edit_message_text(text="Введіть назву товару, який потрібно видалити:")
-        context.user_data['awaiting_product_name_for_delete'] = True
-    elif query.data == 'edit_product':
-        await start_edit_product(update, context)
+    
+    print(f"user_data FINAL: {context.user_data}")
 
 async def start_edit_product(update: Update, context: CallbackContext) -> None:
     query = update.callback_query
@@ -137,19 +152,29 @@ async def handle_category_selection(update: Update, context: CallbackContext) ->
 
 # Функція для обробки повідомлень
 async def handle_message(update: Update, context: CallbackContext, db_security: Database, db_goods: Database) -> None:
+
+    print("\n--- ADMIN HANDLE MESSAGE ---")
+    print(f"Update message text: {update.message.text if update.message else 'No message'}")
+    print(f"User data: {context.user_data}")
+
     fs = GridFS(db_goods)  # Ініціалізуємо GridFS для збереження фото
 
+
     # Отримання назви товару
-    if 'awaiting_product_name' in context.user_data:
+    if context.user_data.get('admin_action') == 'add_product' and context.user_data.get('awaiting_product_name'):
         product_name = update.message.text
-        if product_name == ".":
-            # Якщо користувач ввів крапку, залишаємо попередню назву
-            context.user_data['product_name'] = context.user_data.get('original_product_name', '')
-        else:
-            context.user_data['product_name'] = product_name
+        if not product_name.strip():
+            await update.message.reply_text("Назва товару не може бути порожньою. Спробуйте ще раз:")
+            return
+        
+        context.user_data.update({
+            'product_name': product_name,
+            'awaiting_product_name': False,
+            'awaiting_product_description': True,
+            'current_step': 'description'
+        })
         await update.message.reply_text("Введіть опис товару:")
-        context.user_data['awaiting_product_description'] = True
-        del context.user_data['awaiting_product_name']
+        return  # Важливо: завершуємо обробку поточного повідомлення
     
     # Отримання опису товару
     elif 'awaiting_product_description' in context.user_data:

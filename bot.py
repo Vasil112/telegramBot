@@ -1,6 +1,6 @@
 import os
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, CallbackContext, MessageHandler, filters, CallbackQueryHandler
+from telegram.ext import Application, CommandHandler, CallbackContext, MessageHandler, filters, CallbackQueryHandler, PicklePersistence
 import admin  # Імпортуємо модуль admin
 import account  # Імпортуємо модуль account
 import category  # Імпортуємо модуль category
@@ -15,7 +15,13 @@ from dotenv import load_dotenv
 import os
 
 load_dotenv() # Завантажує змінні з .env файлу
+import logging
 
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 # Підключення до MongoDB
 client = MongoClient(os.getenv("MONGO_URI"))
@@ -186,14 +192,24 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
         await history.handle_phone_number(update, context)
         return
     
-    # Потім інші перевірки для account
-    elif ('awaiting_login' in context.user_data or ...):
+    # Перевіряємо, чи очікується логін (для модуля account)
+    elif 'awaiting_login' in context.user_data:
         await account.handle_message(update, context)
-    else:
+        return
+    
+    # Якщо жодна з умов не виконалася, передаємо повідомлення до admin.handle_message
+    if context.user_data.get('admin_action'):
         await admin.handle_message(update, context, db_security, db_goods)
+        return        
 
 
 def main() -> None:
+    persistence = PicklePersistence(filepath='bot_data')
+    application = Application.builder() \
+        .token(os.getenv("BOT_TOKEN")) \
+        .persistence(persistence) \
+        .build()
+    
     application = Application.builder().token(os.getenv("BOT_TOKEN")).build()
 
     # Додаємо обробники команд
@@ -211,6 +227,7 @@ def main() -> None:
     # Додаємо обробник для повідомлень
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     application.add_handler(MessageHandler(filters.PHOTO, handle_message))
+    
 
     # Додаємо обробники для платежів
     oplata.setup_handlers(application)
