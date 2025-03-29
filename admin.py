@@ -198,15 +198,21 @@ async def handle_message(update: Update, context: CallbackContext, db_security: 
     # Отримання ціни товару
     elif 'awaiting_product_price' in context.user_data:
         product_price = update.message.text
-        if product_price == ".":
-            # Якщо користувач ввів крапку, залишаємо попередню ціну
-            context.user_data['product_price'] = context.user_data.get('original_product_price', '')
-        else:
-            context.user_data['product_price'] = product_price
+        try:
+            if product_price == ".":
+                # Якщо користувач ввів крапку, залишаємо попередню ціну
+                context.user_data['product_price'] = int(context.user_data.get('original_product_price', 0))
+            else:
+                # Конвертуємо введене значення в ціле число
+                context.user_data['product_price'] = int(product_price)
+        except ValueError:
+            await update.message.reply_text("Будь ласка, введіть коректну ціну (ціле число):")
+            return
+            
         await update.message.reply_text("Введіть кількість товару:")
         context.user_data['awaiting_product_quantity'] = True
         del context.user_data['awaiting_product_price']
-    
+        
     # Отримання кількості товару
     elif 'awaiting_product_quantity' in context.user_data:
         product_quantity = update.message.text
@@ -396,15 +402,21 @@ async def handle_message(update: Update, context: CallbackContext, db_security: 
     # Отримання нової ціни товару для редагування
     elif 'awaiting_new_product_price' in context.user_data:
         new_product_price = update.message.text
-        if new_product_price == ".":
-            # Використовуємо оригінальну ціну
-            context.user_data['new_product_price'] = context.user_data.get('original_product_price', '')
-        else:
-            context.user_data['new_product_price'] = new_product_price
+        try:
+            if new_product_price == ".":
+                # Використовуємо оригінальну ціну
+                context.user_data['new_product_price'] = int(context.user_data.get('original_product_price', 0))
+            else:
+                # Конвертуємо введене значення в ціле число
+                context.user_data['new_product_price'] = int(new_product_price)
+        except ValueError:
+            await update.message.reply_text("Будь ласка, введіть коректну ціну (ціле число):")
+            return
+            
         await update.message.reply_text("Введіть нову кількість товару (або введіть '.', щоб залишити попередню кількість):")
         context.user_data['awaiting_new_product_quantity'] = True
         del context.user_data['awaiting_new_product_price']
-        
+            
     # Отримання нової кількості товару для редагування
     elif 'awaiting_new_product_quantity' in context.user_data:
         new_product_quantity = update.message.text
