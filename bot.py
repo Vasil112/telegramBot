@@ -14,7 +14,6 @@ from gridfs import GridFS
 from bson import ObjectId
 
 from dotenv import load_dotenv
-import os
 
 load_dotenv() # Завантажує змінні з .env файлу
 import logging

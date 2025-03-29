@@ -82,7 +82,6 @@ async def handle_admin_callback(update: Update, context: CallbackContext, db_sec
     print(f"Current user_data BEFORE: {context.user_data}")
     
     if query.data == 'add_product':
-        # Очищаємо та ініціалізуємо user_data
         context.user_data.clear()
         context.user_data['admin_action'] = 'add_product'
         print(f"user_data AFTER add_product: {context.user_data}")
@@ -98,22 +97,34 @@ async def handle_admin_callback(update: Update, context: CallbackContext, db_sec
         reply_markup = InlineKeyboardMarkup(categories_keyboard)
         await query.edit_message_reply_markup(reply_markup=reply_markup)
     
+    elif query.data == 'edit_product':
+        # Не очищаємо context.user_data повністю, лише встановлюємо admin_action
+        context.user_data['admin_action'] = 'edit_product'
+        print(f"user_data AFTER edit_product: {context.user_data}")
+        
+        await start_edit_product(update, context)
+    
     elif query.data.startswith('category_'):
-        if 'admin_action' not in context.user_data or context.user_data['admin_action'] != 'add_product':
-            await query.edit_message_text("Помилка: не почато процес додавання товару")
+        if 'admin_action' not in context.user_data:
+            await query.edit_message_text("Помилка: не почато процес додавання/редагування товару")
             return
             
         category = query.data.split('_')[1]
         context.user_data.update({
             'category': category,
-            'awaiting_product_name': True,
+            'awaiting_product_name': True if context.user_data['admin_action'] == 'add_product' else False,
+            'awaiting_product_name_for_edit': True if context.user_data['admin_action'] == 'edit_product' else False,
             'current_step': 'name'
         })
         print(f"user_data AFTER category select: {context.user_data}")
         
-        await query.edit_message_text(text=f"✅ Ви обрали категорію: {category}\nВведіть назву товару:")
+        if context.user_data['admin_action'] == 'add_product':
+            await query.edit_message_text(text=f"✅ Ви обрали категорію: {category}\nВведіть назву товару:")
+        else:
+            await query.edit_message_text(text=f"✅ Ви обрали категорію: {category}\nВведіть назву товару, який потрібно редагувати:")
     
     print(f"user_data FINAL: {context.user_data}")
+
 
 async def start_edit_product(update: Update, context: CallbackContext) -> None:
     query = update.callback_query
@@ -326,15 +337,22 @@ async def handle_message(update: Update, context: CallbackContext, db_security: 
     elif 'awaiting_product_name_for_edit' in context.user_data:
         product_name = update.message.text
         category = context.user_data['category']
-        product = db_goods[category].find_one({"name": product_name})  # Знаходимо товар у базі даних
+        product = db_goods[category].find_one({"name": product_name})
         
         if product:
-            # Зберігаємо оригінальні значення товару
-            context.user_data['original_product_name'] = product['name']
-            context.user_data['original_product_description'] = product['description']
-            context.user_data['original_product_price'] = product['price']
-            context.user_data['original_product_quantity'] = product['quantity']
-            context.user_data['original_product_specs'] = product.get('specs', {})
+            # Зберігаємо всі оригінальні значення
+            context.user_data.update({
+                'original_product_name': product['name'],
+                'original_product_description': product['description'],
+                'original_product_price': product['price'],
+                'original_product_quantity': product['quantity'],
+                'original_product_specs': product.get('specs', {}),
+                'product_name_for_edit': product_name  # Зберігаємо оригінальну назву для пошуку
+            })
+            
+            print(f"\n--- DEBUG: ORIGINAL PRODUCT DATA SAVED ---")
+            print(f"Original name: {context.user_data['original_product_name']}")
+            print(f"Original description: {context.user_data['original_product_description']}")
             
             await update.message.reply_text("Введіть нову назву товару (або введіть '.', щоб залишити попередню назву):")
             context.user_data['awaiting_new_product_name'] = True
@@ -342,19 +360,27 @@ async def handle_message(update: Update, context: CallbackContext, db_security: 
             await update.message.reply_text("Товар не знайдено.")
         
         del context.user_data['awaiting_product_name_for_edit']
-
-    # Отримання нової назви товару для редагування
+        
+    # У функції handle_message, де обробляється 'awaiting_new_product_name':
     elif 'awaiting_new_product_name' in context.user_data:
         new_product_name = update.message.text
         if new_product_name == ".":
-            # Використовуємо оригінальну назву
-            context.user_data['new_product_name'] = context.user_data.get('original_product_name', '')
+            # Використовуємо оригінальну назву, переконуючись, що вона є
+            if 'original_product_name' not in context.user_data:
+                await update.message.reply_text("Помилка: оригінальна назва не знайдена. Будь ласка, введіть нову назву:")
+                return
+            context.user_data['new_product_name'] = context.user_data['original_product_name']
         else:
             context.user_data['new_product_name'] = new_product_name
+        
+        print(f"\n--- DEBUG: NEW PRODUCT NAME SET ---")
+        print(f"Original name: {context.user_data.get('original_product_name')}")
+        print(f"New name: {context.user_data.get('new_product_name')}")
+        
         await update.message.reply_text("Введіть новий опис товару (або введіть '.', щоб залишити попередній опис):")
         context.user_data['awaiting_new_product_description'] = True
         del context.user_data['awaiting_new_product_name']
-
+            
     # Отримання нового опису товару для редагування
     elif 'awaiting_new_product_description' in context.user_data:
         new_product_description = update.message.text
