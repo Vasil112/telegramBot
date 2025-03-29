@@ -10,6 +10,7 @@ import history  # Імпортуємо модуль history
 import oplata # Імпортуємо модуль oplata
 from pymongo import MongoClient
 from gridfs import GridFS
+from bson import ObjectId
 
 from dotenv import load_dotenv
 import os
@@ -123,6 +124,17 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
     
     elif data == 'manage_address':
         await handle_manage_address(update, context)
+    
+    elif data == "delete_address":
+        await handle_delete_address(update, context)
+    
+    elif data.startswith("delete_addr_"):
+        address_id = data.split("_")[-1]
+        await confirm_delete_address(update, context, address_id)
+    
+    elif data.startswith("confirm_delete_addr_"):
+        address_id = data.split("_")[-1]
+        await delete_address(update, context, address_id)
 
     elif data == "confirm_final_order":
         await history.confirm_final_order(update, context)
@@ -143,6 +155,59 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
         await oplata.payment_instructions(update, context)
     elif data == "payment_prepay":
         await oplata.handle_monobank_payment(update, context)
+
+
+
+async def delete_address(update: Update, context: CallbackContext, address_id: str) -> None:
+    query = update.callback_query
+    await query.answer()
+    
+    try:
+        result = user_addresses.delete_one({"_id": ObjectId(address_id)})
+        
+        if result.deleted_count > 0:
+            await query.message.reply_text("✅ Адресу успішно видалено!")
+        else:
+            await query.message.reply_text("❌ Не вдалося знайти адресу для видалення.")
+    except Exception as e:
+        print(f"Помилка при видаленні адреси: {e}")
+        await query.message.reply_text("❌ Сталася помилка при видаленні адреси.")
+    
+    await handle_manage_address(update, context)
+
+
+async def confirm_delete_address(update: Update, context: CallbackContext, address_id: str) -> None:
+    query = update.callback_query
+    await query.answer()
+    
+    keyboard = [
+        [InlineKeyboardButton("✅ Так, видалити", callback_data=f"confirm_delete_addr_{address_id}")],
+        [InlineKeyboardButton("❌ Ні, скасувати", callback_data="manage_address")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await query.message.reply_text("Ви впевнені, що хочете видалити цю адресу?", reply_markup=reply_markup)
+
+
+async def handle_delete_address(update: Update, context: CallbackContext) -> None:
+    query = update.callback_query
+    await query.answer()
+    
+    user_id = query.from_user.id
+    addresses = list(user_addresses.find({"user_id": user_id}))
+    
+    if not addresses:
+        await query.message.reply_text("У вас немає збережених адрес для видалення.")
+        return
+    
+    keyboard = [
+        [InlineKeyboardButton(addr['address'], callback_data=f"delete_addr_{str(addr['_id'])}")]
+        for addr in addresses
+    ]
+    keyboard.append([InlineKeyboardButton("↩️ Назад", callback_data="manage_address")])
+    
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await query.message.reply_text("Оберіть адресу для видалення:", reply_markup=reply_markup)
 
 
 async def handle_manage_address(update: Update, context: CallbackContext) -> None:
@@ -192,16 +257,19 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
         await history.handle_phone_number(update, context)
         return
     
-    # Перевіряємо, чи очікується логін (для модуля account)
-    elif 'awaiting_login' in context.user_data:
+    # Перевіряємо, чи очікується логін або пароль для редагування акаунту
+    elif any(key in context.user_data for key in ['awaiting_login', 'awaiting_password', 'awaiting_email', 
+                                               'awaiting_verification', 'awaiting_login_for_login',
+                                               'awaiting_verification_for_login', 'awaiting_password_for_unlock',
+                                               'awaiting_password_for_edit', 'awaiting_new_login']):
         await account.handle_message(update, context)
         return
     
     # Якщо жодна з умов не виконалася, передаємо повідомлення до admin.handle_message
-    if context.user_data.get('admin_action'):
+    elif context.user_data.get('admin_action'):
         await admin.handle_message(update, context, db_security, db_goods)
-        return        
-
+        return
+    
 
 def main() -> None:
     persistence = PicklePersistence(filepath='bot_data')

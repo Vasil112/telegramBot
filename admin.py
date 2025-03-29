@@ -152,11 +152,7 @@ async def handle_category_selection(update: Update, context: CallbackContext) ->
 
 # Функція для обробки повідомлень
 async def handle_message(update: Update, context: CallbackContext, db_security: Database, db_goods: Database) -> None:
-
-    print("\n--- ADMIN HANDLE MESSAGE ---")
-    print(f"Update message text: {update.message.text if update.message else 'No message'}")
-    print(f"User data: {context.user_data}")
-
+    
     fs = GridFS(db_goods)  # Ініціалізуємо GridFS для збереження фото
 
 

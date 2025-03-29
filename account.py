@@ -283,7 +283,7 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
         new_login = update.message.text
         users.update_one({"user_id": user_id}, {"$set": {"login": new_login}})
         await update.message.reply_text("Логін успішно змінено!")
-        del context.user_data['awaiting_new_login']  
+        del context.user_data['awaiting_new_login'] 
 
 # Функція для надсилання паролю на вказану електронну пошту
 async def send_password_to_user(email: str):
