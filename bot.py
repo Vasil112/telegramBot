@@ -8,6 +8,7 @@ import basket  # Імпортуємо модуль basket
 import services  # Імпортуємо модуль services
 import history  # Імпортуємо модуль history
 import oplata # Імпортуємо модуль oplata
+import address  # Імпортуємо модуль address
 from pymongo import MongoClient
 from gridfs import GridFS
 from bson import ObjectId
@@ -106,7 +107,7 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
         await basket.view_basket(update, context)
     
     # Обробка кнопки "Видалити" з кошика
-    elif data.startswith("delete_"):
+    elif data.startswith("delete_item_"):
         item_id = data.split("_")[1]
         await basket.handle_delete_from_cart(update, context, item_id)
     
@@ -123,18 +124,18 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
         await services.handle_protection_choice(update, context)
     
     elif data == 'manage_address':
-        await handle_manage_address(update, context)
+        await address.handle_manage_address(update, context)
     
     elif data == "delete_address":
-        await handle_delete_address(update, context)
+        await address.handle_delete_address(update, context)
     
-    elif data.startswith("delete_addr_"):
+    elif data.startswith("delete_address_"):
         address_id = data.split("_")[-1]
-        await confirm_delete_address(update, context, address_id)
+        await address.confirm_delete_address(update, context, address_id)
     
     elif data.startswith("confirm_delete_addr_"):
         address_id = data.split("_")[-1]
-        await delete_address(update, context, address_id)
+        await address.delete_address(update, context, address_id)
 
     elif data == "confirm_final_order":
         await history.confirm_final_order(update, context)
@@ -143,7 +144,7 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
     elif data.startswith("select_address_"):
         await history.handle_address_selection(update, context)
     elif data.startswith("save_address_"):
-        await history.handle_address_save_decision(update, context)
+        await address.handle_address_save_decision(update, context)
     elif data.startswith("payment_"):
         await history.handle_payment(update, context)
     elif data.startswith("use_saved_data_"):
@@ -158,88 +159,17 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
 
 
 
-async def delete_address(update: Update, context: CallbackContext, address_id: str) -> None:
-    query = update.callback_query
-    await query.answer()
-    
-    try:
-        result = user_addresses.delete_one({"_id": ObjectId(address_id)})
-        
-        if result.deleted_count > 0:
-            await query.message.reply_text("✅ Адресу успішно видалено!")
-        else:
-            await query.message.reply_text("❌ Не вдалося знайти адресу для видалення.")
-    except Exception as e:
-        print(f"Помилка при видаленні адреси: {e}")
-        await query.message.reply_text("❌ Сталася помилка при видаленні адреси.")
-    
-    await handle_manage_address(update, context)
-
-
-async def confirm_delete_address(update: Update, context: CallbackContext, address_id: str) -> None:
-    query = update.callback_query
-    await query.answer()
-    
-    keyboard = [
-        [InlineKeyboardButton("✅ Так, видалити", callback_data=f"confirm_delete_addr_{address_id}")],
-        [InlineKeyboardButton("❌ Ні, скасувати", callback_data="manage_address")]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    await query.message.reply_text("Ви впевнені, що хочете видалити цю адресу?", reply_markup=reply_markup)
-
-
-async def handle_delete_address(update: Update, context: CallbackContext) -> None:
-    query = update.callback_query
-    await query.answer()
-    
-    user_id = query.from_user.id
-    addresses = list(user_addresses.find({"user_id": user_id}))
-    
-    if not addresses:
-        await query.message.reply_text("У вас немає збережених адрес для видалення.")
-        return
-    
-    keyboard = [
-        [InlineKeyboardButton(addr['address'], callback_data=f"delete_addr_{str(addr['_id'])}")]
-        for addr in addresses
-    ]
-    keyboard.append([InlineKeyboardButton("↩️ Назад", callback_data="manage_address")])
-    
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await query.message.reply_text("Оберіть адресу для видалення:", reply_markup=reply_markup)
-
-
-async def handle_manage_address(update: Update, context: CallbackContext) -> None:
-    query = update.callback_query
-    await query.answer()
-    
-    user_id = query.from_user.id
-    addresses = list(user_addresses.find({"user_id": user_id}))
-    
-    if addresses:
-        message = "Ваші збережені адреси:\n\n" + "\n".join([f"📍 {addr['address']}" for addr in addresses])
-        keyboard = [
-            [InlineKeyboardButton("Додати нову адресу", callback_data="add_new_address")],
-            [InlineKeyboardButton("Видалити адресу", callback_data="delete_address")]
-        ]
-    else:
-        message = "У вас немає збережених адрес."
-        keyboard = [[InlineKeyboardButton("Додати адресу", callback_data="add_new_address")]]
-    
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await query.message.reply_text(message, reply_markup=reply_markup)
 
 # Функція для обробки повідомлень
 async def handle_message(update: Update, context: CallbackContext) -> None:
     # Спочатку перевіряємо, чи очікується адреса
     if context.user_data.get('awaiting_address'):
-        await history.handle_address(update, context)
+        await address.handle_address(update, context)
         return
     
     # Перевіряємо, чи очікується PІБ для збереження
     elif context.user_data.get('awaiting_full_name_for_save'):
-        await history.handle_full_name_for_save(update, context)
+        await address.handle_full_name_for_save(update, context)
         return
     
     # Перевіряємо, чи очікується PІБ для замовлення
@@ -249,7 +179,7 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
     
     # Перевіряємо, чи очікується номер телефону для збереження
     elif context.user_data.get('awaiting_phone_for_save'):
-        await history.handle_phone_for_save(update, context)
+        await address.handle_phone_for_save(update, context)
         return
     
     # Перевіряємо, чи очікується номер телефону для замовлення
@@ -278,7 +208,6 @@ def main() -> None:
         .persistence(persistence) \
         .build()
     
-    application = Application.builder().token(os.getenv("BOT_TOKEN")).build()
 
     # Додаємо обробники команд
     application.add_handler(CommandHandler("start", start))
@@ -300,7 +229,7 @@ def main() -> None:
     # Додаємо обробники для платежів
     oplata.setup_handlers(application)
     history.setup_handlers(application)
-
+    address.setup_handlers(application)
     application.run_polling()
 
 main()  

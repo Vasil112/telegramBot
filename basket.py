@@ -38,7 +38,7 @@ async def view_basket(update: Update, context: CallbackContext) -> None:
         message += f"📦 {product_name}\nКількість: {quantity}\nЦіна: {price} грн\n\n"
 
         # Додаємо кнопку "Видалити" для кожного товару
-        delete_button = InlineKeyboardButton(f"Видалити {product_name}", callback_data=f"delete_{item['_id']}")
+        delete_button = InlineKeyboardButton(f"Видалити {product_name}", callback_data=f"delete_item_{item['_id']}")
         keyboard.append([delete_button])
 
     message += f"Загальна сума: {total_price} грн"

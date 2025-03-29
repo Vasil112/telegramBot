@@ -12,3 +12,8 @@ url = f"https://api.monobank.ua/api/merchant/invoice/status?invoiceId={invoice_i
 response = requests.get(url, headers=headers)
 
 print(response.status_code, response.json())
+
+
+
+application = Application.builder().token(os.getenv("BOT_TOKEN")).build()
+#має бути у bot.py у фукнції main()
