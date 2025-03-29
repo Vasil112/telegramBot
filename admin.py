@@ -98,11 +98,27 @@ async def handle_admin_callback(update: Update, context: CallbackContext, db_sec
         await query.edit_message_reply_markup(reply_markup=reply_markup)
     
     elif query.data == 'edit_product':
-        # Не очищаємо context.user_data повністю, лише встановлюємо admin_action
         context.user_data['admin_action'] = 'edit_product'
         print(f"user_data AFTER edit_product: {context.user_data}")
-        
         await start_edit_product(update, context)
+
+    elif query.data == 'delete_product':
+        context.user_data.clear()
+        context.user_data['admin_action'] = 'delete_product'
+        print(f"user_data AFTER delete_product: {context.user_data}")
+        
+        # Створюємо нове повідомлення з кнопками категорій
+        categories_keyboard = [
+            [InlineKeyboardButton("🎧 Аксесуари", callback_data='delete_category_accessories')],
+            [InlineKeyboardButton("🍏 IPhone", callback_data='delete_category_iphone')],
+            [InlineKeyboardButton("📞 Телефони", callback_data='delete_category_phones')],
+            [InlineKeyboardButton("📱 Смартфони", callback_data='delete_category_smartphones')],
+            [InlineKeyboardButton("⌚ Годинники", callback_data='delete_category_watches')]
+        ]
+        reply_markup = InlineKeyboardMarkup(categories_keyboard)
+        
+        # Замість редагування існуючого повідомлення, відправляємо нове
+        await query.message.reply_text("Оберіть категорію для видалення товару:", reply_markup=reply_markup)
     
     elif query.data.startswith('category_'):
         if 'admin_action' not in context.user_data:
@@ -123,7 +139,16 @@ async def handle_admin_callback(update: Update, context: CallbackContext, db_sec
         else:
             await query.edit_message_text(text=f"✅ Ви обрали категорію: {category}\nВведіть назву товару, який потрібно редагувати:")
     
+    elif query.data.startswith('delete_category_'):
+        category = query.data.split('_')[2]  # Отримуємо назву категорії
+        context.user_data.update({
+            'category': category,
+            'awaiting_product_name_for_delete': True
+        })
+        await query.edit_message_text(text=f"✅ Ви обрали категорію: {category}\nВведіть назву товару для видалення:")
     print(f"user_data FINAL: {context.user_data}")
+
+
 
 
 async def start_edit_product(update: Update, context: CallbackContext) -> None:
@@ -327,7 +352,7 @@ async def handle_message(update: Update, context: CallbackContext, db_security: 
             await update.message.reply_text("Категорія не вказана. Спробуйте ще раз.")
 
         del context.user_data['awaiting_product_name_for_delete']
-
+        
     elif 'awaiting_product_name_for_edit' in context.user_data:
         if 'category' not in context.user_data:
             await update.message.reply_text("⚠ Категорія товару не обрана. Будь ласка, спочатку вкажіть категорію.")

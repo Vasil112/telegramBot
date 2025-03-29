@@ -98,7 +98,7 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
         await admin.handle_category_selection(update, context)
 
     # Обробка кнопок для модуля admin
-    elif data.startswith(('add_product', 'delete_product', 'edit_product', 'category_')):
+    elif data.startswith(('add_product', 'delete_product', 'edit_product', 'category_', 'delete_category_', 'edit_category_')):
         await admin.handle_admin_callback(update, context, db_security, db_goods)
     
     # Обробка кнопки "Кошик"
