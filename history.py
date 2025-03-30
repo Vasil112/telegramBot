@@ -5,7 +5,7 @@ from bson import ObjectId
 from datetime import datetime
 import re
 from oplata import handle_monobank_payment
-import address
+import spam
 
 from dotenv import load_dotenv
 import os
@@ -216,12 +216,13 @@ async def complete_order(update: Update, context: CallbackContext) -> None:
     order_data['total_price'] = total_price
     
     # Зберігаємо замовлення
-    orders.insert_one(order_data)
+    order = orders.insert_one(order_data)
+    order_id = order.inserted_id
     
     # Очищаємо кошик
     basket.delete_many({"user_id": user_id})
     
-    # Надсилаємо підтвердження
+    # Надсилаємо підтвердження в чат
     await context.bot.send_message(
         chat_id=update.effective_chat.id,
         text=f"""✅ Замовлення оформлено!
@@ -236,9 +237,31 @@ async def complete_order(update: Update, context: CallbackContext) -> None:
 Дякуємо за замовлення!"""
     )
     
+    # Надсилаємо лист з підтвердженням на пошту
+    user = users.find_one({"user_id": user_id})
+    if user and user.get('email'):
+        try:
+            await spam.send_order_confirmation(update, context, order_id)
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text=f"📧 Лист з підтвердженням замовлення було надіслано на {user['email']}"
+            )
+        except Exception as e:
+            print(f"Помилка при відправці листа: {e}")
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="❌ Не вдалося надіслати лист з підтвердженням. Будь ласка, перевірте ваш email у профілі."
+            )
+    else:
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text="ℹ️ Email не вказано в профілі. Лист з підтвердженням не було надіслано."
+        )
+    
     # Очищаємо тимчасові дані
     context.user_data.clear()
-    
+
+
 
 def setup_handlers(application):
     # Обробники кнопок
