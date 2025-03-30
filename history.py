@@ -49,24 +49,26 @@ async def handle_address_selection(update: Update, context: CallbackContext) -> 
     
     try:
         address_id = query.data.split("_")[-1]
-        address = user_addresses.find_one({"_id": ObjectId(address_id)})
-        if address:
-            context.user_data['order_address'] = address['address']
-            context.user_data['order_full_name'] = address.get('full_name', '')
-            context.user_data['order_phone'] = address.get('phone', '')
+        address_data = user_addresses.find_one({"_id": ObjectId(address_id)})
+        if address_data:
+            # Зберігаємо адресу
+            context.user_data['order_address'] = address_data['address']
             
             # Якщо в базі вже є ПІБ і телефон, пропонуємо їх використати
-            if address.get('full_name') and address.get('phone'):
+            if address_data.get('full_name') and address_data.get('phone'):
                 keyboard = [
                     [InlineKeyboardButton("✅ Використати збережені дані", callback_data="use_saved_data_yes")],
                     [InlineKeyboardButton("❌ Ввести нові дані", callback_data="use_saved_data_no")]
                 ]
                 reply_markup = InlineKeyboardMarkup(keyboard)
                 await query.message.reply_text(
-                    f"Використати збережені дані?\nПІБ: {address['full_name']}\nТелефон: {address['phone']}",
+                    f"Використати збережені дані?\nПІБ: {address_data['full_name']}\nТелефон: {address_data['phone']}",
                     reply_markup=reply_markup
                 )
                 context.user_data['awaiting_data_decision'] = True
+                # Зберігаємо дані на випадок, якщо користувач обере "Використати"
+                context.user_data['saved_full_name'] = address_data['full_name']
+                context.user_data['saved_phone'] = address_data['phone']
             else:
                 await ask_for_full_name(update, context)
     except Exception as e:
@@ -78,11 +80,19 @@ async def handle_use_saved_data_decision(update: Update, context: CallbackContex
     await query.answer()
     
     if query.data == "use_saved_data_yes":
-        await ask_for_payment_method(update, context)
+        # Використовуємо збережені дані
+        context.user_data['order_full_name'] = context.user_data.get('saved_full_name', '')
+        context.user_data['order_phone'] = context.user_data.get('saved_phone', '')
+        # Видаляємо тимчасові дані
+        if 'saved_full_name' in context.user_data:
+            del context.user_data['saved_full_name']
+        if 'saved_phone' in context.user_data:
+            del context.user_data['saved_phone']
     else:
         await ask_for_full_name(update, context)
     
     del context.user_data['awaiting_data_decision']
+    await ask_for_payment_method(update, context)
 
 
 async def ask_for_full_name(update: Update, context: CallbackContext) -> None:
@@ -173,7 +183,11 @@ async def complete_order(update: Update, context: CallbackContext) -> None:
     db_goods = client['goods']
     
     for item in basket_items:
-        # Додаємо перевірку на наявність поля 'category'
+        # Пропускаємо товари з is_protection=True
+        if item.get('is_protection', False):
+            continue
+            
+        # Додаємо перевірку на наявність обов'язкових полів
         if 'category' not in item or 'product_id' not in item:
             continue
             
@@ -224,7 +238,7 @@ async def complete_order(update: Update, context: CallbackContext) -> None:
     
     # Очищаємо тимчасові дані
     context.user_data.clear()
-
+    
 
 def setup_handlers(application):
     # Обробники кнопок

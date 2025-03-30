@@ -7,6 +7,7 @@ import json
 import time
 import os
 from bson import ObjectId
+import spam
 
 from dotenv import load_dotenv
 import os
@@ -21,6 +22,7 @@ db = client['security']
 orders = db['orders']
 payments = db['payments']
 basket_collection = db['basket']  # Перейменуємо, щоб уникнути конфлікту з імпортом модуля
+users = db['users'] 
 
 # Налаштування Monobank API
 MONOBANK_API_URL = "https://api.monobank.ua"
@@ -38,11 +40,12 @@ async def handle_monobank_payment(update: Update, context: CallbackContext) -> N
         await query.message.reply_text("Ваш кошик порожній!")
         return
     
-    # Отримуємо дані користувача (якщо вони є в user_data)
-    full_name = context.user_data.get('full_name', 'Не вказано')
-    phone = context.user_data.get('phone', 'Не вказано')
-    address = context.user_data.get('address', 'Не вказано')
+    # Отримуємо дані користувача з context.user_data
+    full_name = context.user_data.get('order_full_name', 'Не вказано')  # Змінено з 'full_name'
+    phone = context.user_data.get('order_phone', 'Не вказано')        # Змінено з 'phone'
+    address = context.user_data.get('order_address', 'Не вказано')    # Змінено з 'address'
 
+    
     # Розраховуємо загальну суму
     total_price = sum(float(item['price']) * int(item['quantity']) for item in basket_items)
     amount_kopiyky = int(total_price * 100)  # Конвертуємо в копійки
@@ -151,25 +154,25 @@ async def verify_payment(update: Update, context: CallbackContext) -> None:
     payment = payments.find_one({"payment_id": payment_id})
     
     if not payment:
-        await query.message.reply_text("Платіж не знайдено!")
+        await query.message.reply_text("❌ Платіж не знайдено в нашій системі!")
         return
     
     try:
         headers = {
-            "X-Token": MONOBANK_MERCHANT_TOKEN
+            "X-Token": MONOBANK_MERCHANT_TOKEN,
+            "Content-Type": "application/json"
         }
         
         response = requests.get(
-            f"https://api.monobank.ua/api/merchant/invoice/status?invoiceId={payment_id}",
-            headers={
-                "X-Token": "MONOBANK_MERCHANT_TOKEN",
-                "Content-Type": "application/json"
-            }
+            f"{MONOBANK_API_URL}/api/merchant/invoice/status?invoiceId={payment_id}",
+            headers=headers
         )
         response.raise_for_status()
         status_info = response.json()
         
-        if status_info['status'] == "success":
+        print(f"Статус платежу від Monobank: {status_info}")
+        
+        if status_info.get('status') == "success":
             # Оновлюємо статус платежу
             payments.update_one(
                 {"payment_id": payment_id},
@@ -185,16 +188,30 @@ async def verify_payment(update: Update, context: CallbackContext) -> None:
             db_goods = client['goods']
             order = orders.find_one({"_id": ObjectId(payment['order_id'])})
             
-            for item in order['items']:
-                category_name = item['category']
-                product_id = item['product_id']
-                
-                # Оновлюємо кількість товару
-                db_goods[category_name].update_one(
-                    {"_id": ObjectId(product_id)},
-                    {"$inc": {"quantity": -int(item['quantity'])}}
-                )
-            
+            if order and 'items' in order:
+                for item in order['items']:
+                    try:
+                        # Пропускаємо товари з is_protection=True
+                        if item.get('is_protection', False):
+                            continue
+                            
+                        # Перевіряємо наявність обов'язкових полів
+                        if not all(key in item for key in ['category', 'product_id', 'quantity']):
+                            print(f"Попередження: товар має недостатні дані: {item}")
+                            continue
+                            
+                        category_name = item['category']
+                        product_id = item['product_id']
+                        
+                        # Оновлюємо кількість товару
+                        db_goods[category_name].update_one(
+                            {"_id": ObjectId(product_id)},
+                            {"$inc": {"quantity": -int(item['quantity'])}}
+                        )
+                    except Exception as item_error:
+                        print(f"Помилка при оновленні товару {item.get('product_id')}: {item_error}")
+                        continue
+                    
             # Оновлюємо статус замовлення
             orders.update_one(
                 {"_id": ObjectId(payment['order_id'])},
@@ -214,24 +231,57 @@ async def verify_payment(update: Update, context: CallbackContext) -> None:
 ✅ Замовлення оформлено!
 
 📋 Деталі замовлення:
-👤 ПІБ: {order['full_name']}
-📞 Телефон: {order['phone']}
-🏠 Адреса: {order['address']}
-💳 Спосіб оплати: {order['payment_method']}
-💰 Загальна сума: {order['total_price']} грн
+👤 ПІБ: {order.get('full_name', 'Не вказано')}
+📞 Телефон: {order.get('phone', 'Не вказано')}
+🏠 Адреса: {order.get('address', 'Не вказано')}
+💳 Спосіб оплати: {order.get('payment_method', 'Monobank')}
+💰 Загальна сума: {order.get('total_price', 0)} грн
 
 Дякуємо за замовлення!
 """
             await query.message.reply_text(message)
             
+            # Отримуємо email користувача з бази даних
+            user = users.find_one({"user_id": query.from_user.id})
+            if user and user.get('email'):
+                try:
+                    await spam.send_order_confirmation(update, context, ObjectId(payment['order_id']))
+                    await query.message.reply_text(f"📧 Лист з підтвердженням замовлення було надіслано на {user['email']}")
+                except Exception as e:
+                    print(f"Помилка при відправці листа: {e}")
+                    await query.message.reply_text("❌ Не вдалося надіслати лист з підтвердженням. Будь ласка, перевірте ваш email у профілі.")
+            else:
+                await query.message.reply_text("ℹ️ Email не вказано в профілі. Лист з підтвердженням не було надіслано.")
+            
             # Очищаємо контекст
             context.user_data.clear()
+        
+        elif status_info.get('status') == "processing":
+            await query.message.reply_text("🔄 Платіж в обробці. Будь ласка, зачекайте декілька хвилин і спробуйте ще раз.")
+        
+        elif status_info.get('status') == "failure":
+            await query.message.reply_text("❌ Платіж не пройшов. Спробуйте ще раз або оберіть інший спосіб оплати.")
+        
+        elif status_info.get('status') == "expired":
+            await query.message.reply_text("⌛ Час на оплату минув. Будь ласка, створіть нове замовлення.")
+        
         else:
-            await query.message.reply_text(f"❌ Статус платежу: {status_info['status']}. Будь ласка, спробуйте ще раз або зверніться до підтримки.")
+            await query.message.reply_text(f"ℹ️ Статус платежу: {status_info.get('status', 'невідомий')}. Якщо ви вже оплатили, будь ласка, зачекайте декілька хвилин.")
+    
+    except requests.exceptions.HTTPError as e:
+        error_msg = f"HTTP помилка при перевірці платежу: {e.response.status_code}\n"
+        if e.response.status_code == 400:
+            try:
+                error_details = e.response.json()
+                error_msg += f"Деталі: {error_details.get('errorDescription', 'Невідома помилка')}"
+            except:
+                error_msg += f"Текст помилки: {e.response.text}"
+        print(error_msg)
+        await query.message.reply_text("❌ Помилка при перевірці статусу платежу. Спробуйте пізніше.")
     
     except Exception as e:
-        print(f"Помилка при перевірці статусу платежу: {e}")
-        await query.message.reply_text("❌ Сталася помилка при перевірці статусу платежу. Спробуйте ще раз.")
+        print(f"Неочікувана помилка при перевірці платежу: {str(e)}")
+        await query.message.reply_text("❌ Сталася неочікувана помилка при перевірці платежу. Спробуйте ще раз або зверніться до підтримки.")
 
 
 async def payment_instructions(update: Update, context: CallbackContext) -> None:

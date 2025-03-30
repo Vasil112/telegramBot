@@ -109,7 +109,7 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
     elif data.startswith("delete_item_"):
         item_id = data
         await basket.handle_delete_from_cart(update, context, item_id)
-    
+
     # Обробка кнопки "До замовлення"
     elif data == "place_order":
         await basket.handle_place_order(update, context)
