@@ -51,35 +51,53 @@ async def view_basket(update: Update, context: CallbackContext) -> None:
     await update.callback_query.message.reply_text(message, reply_markup=reply_markup)
     
 async def handle_delete_from_cart(update: Update, context: CallbackContext, item_id: str) -> None:
-    user_id = update.callback_query.from_user.id
+    query = update.callback_query
+    await query.answer()
+    
+    user_id = query.from_user.id
+    
+    try:
+        # Перевіряємо, чи item_id містить префікс "delete_item_"
+        if item_id.startswith("delete_item_"):
+            item_id = item_id.split("_")[-1]  # Видаляємо префікс
+            
+        # Перетворюємо рядок у ObjectId
+        object_id = ObjectId(item_id)
+        
+        # Видаляємо товар з кошика
+        result = basket.delete_one({"_id": object_id, "user_id": user_id})
 
-    # Видаляємо товар з кошика
-    result = basket.delete_one({"_id": ObjectId(item_id), "user_id": user_id})
+        if result.deleted_count > 0:
+            await query.message.reply_text("Товар видалено з кошика.")
+            # Оновлюємо кількість товарів у кошику користувача
+            user = users.find_one({"user_id": user_id})
+            if user:
+                users.update_one(
+                    {"user_id": user_id},
+                    {"$inc": {"basket": -1}}  # Зменшуємо кількість товарів у кошику на 1
+                )
+        else:
+            await query.message.reply_text("Не вдалося видалити товар.")
 
-    if result.deleted_count > 0:
-        await update.callback_query.message.reply_text("Товар видалено з кошика.")
-        # Оновлюємо кількість товарів у кошику користувача
-        user = users.find_one({"user_id": user_id})
-        if user:
-            users.update_one(
-                {"user_id": user_id},
-                {"$inc": {"basket": -1}}  # Зменшуємо кількість товарів у кошику на 1
-            )
-    else:
-        await update.callback_query.message.reply_text("Не вдалося видалити товар.")
+        # Показуємо оновлений кошик
+        await view_basket(update, context)
+        
+    except Exception as e:
+        print(f"Помилка при видаленні товару: {e}")
+        await query.message.reply_text("Сталася помилка при видаленні товару. Спробуйте ще раз.")
 
-    # Показуємо оновлений кошик
-    await view_basket(update, context)
-
+        
 async def handle_add_to_cart(update: Update, context: CallbackContext, product_id: str):
     user_id = update.callback_query.from_user.id
     product = None
+    product_category = None
 
     # Пошук товару в усіх категоріях
     categories = ["accessories", "iphone", "phones", "smartphones", "watches"]
     for category in categories:
         product = db_goods[category].find_one({"_id": ObjectId(product_id)})
         if product:
+            product_category = category  # Зберігаємо категорію товару
             break
 
     if not product:
@@ -113,7 +131,8 @@ async def handle_add_to_cart(update: Update, context: CallbackContext, product_i
             "product_id": ObjectId(product_id),
             "product_name": product_name,
             "quantity": int(1),  # Переконуємося, що це int
-            "price": int(product_price)
+            "price": int(product_price),
+            "category": product_category  # Додаємо категорію товару
         })
         await update.callback_query.message.reply_text(f"Товар {product_name} додано до кошика.")
 
@@ -127,34 +146,6 @@ async def handle_add_to_cart(update: Update, context: CallbackContext, product_i
 
     # Очищення context.user_data після додавання до кошика
     context.user_data.clear()
-
-async def handle_place_order(update: Update, context: CallbackContext) -> None:
-    user_id = update.callback_query.from_user.id
-    basket_items = list(basket.find({"user_id": user_id}))
-
-    if not basket_items:
-        await update.callback_query.message.reply_text("Ваш кошик порожній.")
-        return
-
-    # Формуємо список товарів у кошику
-    message = "Ваш кошик:\n\n"
-    total_price = 0
-    for item in basket_items:
-        product_name = item['product_name']
-        quantity = item['quantity']
-        price = item['price']
-        total_price += int(price) * quantity
-        message += f"📦 {product_name}\nКількість: {quantity}\nЦіна: {price} грн\n\n"
-
-    message += f"Загальна сума: {total_price} грн\n\nБажаєте продовжити?"
-
-    # Кнопки "Так" і "Ні"
-    keyboard = [
-        [InlineKeyboardButton("Так", callback_data="confirm_order")],
-        [InlineKeyboardButton("Ні", callback_data="cancel_order")]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.callback_query.message.reply_text(message, reply_markup=reply_markup)
 
 async def handle_place_order(update: Update, context: CallbackContext) -> None:
     user_id = update.callback_query.from_user.id

@@ -159,9 +159,36 @@ async def handle_payment(update: Update, context: CallbackContext) -> None:
 
 async def complete_order(update: Update, context: CallbackContext) -> None:
     user_id = update.effective_user.id
+    basket_items = list(basket.find({"user_id": user_id}))
+    
+    if not basket_items:
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text="Ваш кошик порожній!"
+        )
+        return
+    
+    # Оновлюємо кількість товарів у базі даних
+    client = MongoClient(os.getenv("MONGO_URI"))
+    db_goods = client['goods']
+    
+    for item in basket_items:
+        # Додаємо перевірку на наявність поля 'category'
+        if 'category' not in item or 'product_id' not in item:
+            continue
+            
+        category_name = item['category']
+        product_id = item['product_id']
+        
+        # Оновлюємо кількість товару
+        db_goods[category_name].update_one(
+            {"_id": ObjectId(product_id)},
+            {"$inc": {"quantity": -int(item.get('quantity', 1))}}
+        )
+    
     order_data = {
         "user_id": user_id,
-        "items": list(basket.find({"user_id": user_id})),
+        "items": basket_items,
         "address": context.user_data.get('order_address', ''),
         "full_name": context.user_data.get('order_full_name', ''),
         "phone": context.user_data.get('order_phone', ''),
@@ -171,7 +198,7 @@ async def complete_order(update: Update, context: CallbackContext) -> None:
     }
     
     # Розраховуємо загальну суму
-    total_price = sum(float(item['price']) * int(item['quantity']) for item in order_data['items'])
+    total_price = sum(float(item['price']) * int(item.get('quantity', 1)) for item in order_data['items'])
     order_data['total_price'] = total_price
     
     # Зберігаємо замовлення
@@ -197,6 +224,7 @@ async def complete_order(update: Update, context: CallbackContext) -> None:
     
     # Очищаємо тимчасові дані
     context.user_data.clear()
+
 
 def setup_handlers(application):
     # Обробники кнопок

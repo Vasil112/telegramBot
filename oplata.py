@@ -75,7 +75,7 @@ async def handle_monobank_payment(update: Update, context: CallbackContext) -> N
             "destination": "Оплата товарів",
             "comment": "Оплата замовлення"
         },
-        "redirectUrl": "https://t.me/your_bot",  # URL для перенаправлення після оплати
+        "redirectUrl": "https://t.me/storeManager_112Bot",  # URL для перенаправлення після оплати
         "webHookUrl": "https://your-webhook-url.com/monobank",  # URL для отримання статусу
         "validity": 3600,  # 1 година
         "paymentType": "debit"
@@ -162,7 +162,7 @@ async def verify_payment(update: Update, context: CallbackContext) -> None:
         response = requests.get(
             f"https://api.monobank.ua/api/merchant/invoice/status?invoiceId={payment_id}",
             headers={
-                "X-Token": "uxknxd8adVw1__oXS0CDXVQcnkwOIG4uk0CYYT74_TYg",
+                "X-Token": "MONOBANK_MERCHANT_TOKEN",
                 "Content-Type": "application/json"
             }
         )
@@ -179,6 +179,21 @@ async def verify_payment(update: Update, context: CallbackContext) -> None:
                     "monobank_status": status_info
                 }}
             )
+            
+            # Оновлюємо кількість товарів у базі даних
+            client = MongoClient(os.getenv("MONGO_URI"))
+            db_goods = client['goods']
+            order = orders.find_one({"_id": ObjectId(payment['order_id'])})
+            
+            for item in order['items']:
+                category_name = item['category']
+                product_id = item['product_id']
+                
+                # Оновлюємо кількість товару
+                db_goods[category_name].update_one(
+                    {"_id": ObjectId(product_id)},
+                    {"$inc": {"quantity": -int(item['quantity'])}}
+                )
             
             # Оновлюємо статус замовлення
             orders.update_one(
@@ -217,6 +232,7 @@ async def verify_payment(update: Update, context: CallbackContext) -> None:
     except Exception as e:
         print(f"Помилка при перевірці статусу платежу: {e}")
         await query.message.reply_text("❌ Сталася помилка при перевірці статусу платежу. Спробуйте ще раз.")
+
 
 async def payment_instructions(update: Update, context: CallbackContext) -> None:
     query = update.callback_query
