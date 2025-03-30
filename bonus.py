@@ -29,14 +29,15 @@ def get_status_info(total_spent):
 
 async def update_user_status(user_id):
     """Оновлює статус користувача на основі всіх його замовлень"""
-    # Отримуємо всі замовлення користувача (враховуємо різні варіанти статусів)
+    # Отримуємо всі замовлення користувача (враховуємо всі можливі статуси)
     user_orders = list(orders.find({
         "user_id": user_id,
-        "status": {"$in": ["Оплачено", "Доставлено", "paid", "completed", "Нове", "В обробці"]}
+        "status": {"$in": ["Оплачено", "Доставлено", "paid", "completed", "Нове", "В обробці", "Очікує оплати"]}
     }))
     
-    # Рахуємо загальну суму витрат (враховуємо всі варіанти замовлень)
-    total_spent = sum(float(order.get('total_price', 0)) for order in user_orders)
+    # Рахуємо загальну суму витрат (враховуємо всі замовлення, крім скасованих)
+    total_spent = sum(float(order.get('total_price', 0)) for order in user_orders 
+                  if order.get('status') not in ["Скасовано", "canceled"])
     
     # Отримуємо поточний статус
     status_info = get_status_info(total_spent)
@@ -64,6 +65,7 @@ async def show_status_info(update: Update, context: CallbackContext):
     
     # Оновлюємо статус перед показом
     status_info = await update_user_status(user_id)
+    user = users.find_one({"user_id": user_id})  # Отримуємо оновлені дані
     
     # Визначаємо прогрес до наступного статусу
     next_status = None
