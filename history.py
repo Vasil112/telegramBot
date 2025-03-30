@@ -6,6 +6,7 @@ from datetime import datetime
 import re
 from oplata import handle_monobank_payment
 import spam
+import bonus
 
 from dotenv import load_dotenv
 import os
@@ -260,6 +261,7 @@ async def complete_order(update: Update, context: CallbackContext) -> None:
     
     # Очищаємо тимчасові дані
     context.user_data.clear()
+    await bonus.update_status_after_purchase(user_id, total_price, context)
 
 
 

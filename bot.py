@@ -12,6 +12,7 @@ import address  # Імпортуємо модуль address
 from pymongo import MongoClient
 from gridfs import GridFS
 from bson import ObjectId
+import bonus
 
 from dotenv import load_dotenv
 
@@ -216,6 +217,7 @@ def main() -> None:
     application.add_handler(CommandHandler("stop", stop))
     application.add_handler(CommandHandler("status", status))
     application.add_handler(CommandHandler("account", account.account))
+    application.add_handler(CommandHandler("statuss", bonus.show_status_info))
 
     # Додаємо обробник для CallbackQuery (кнопок)
     application.add_handler(CallbackQueryHandler(button_callback))

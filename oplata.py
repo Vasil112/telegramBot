@@ -8,6 +8,7 @@ import time
 import os
 from bson import ObjectId
 import spam
+import bonus
 
 from dotenv import load_dotenv
 import os
@@ -45,7 +46,7 @@ async def handle_monobank_payment(update: Update, context: CallbackContext) -> N
     phone = context.user_data.get('order_phone', 'Не вказано')        # Змінено з 'phone'
     address = context.user_data.get('order_address', 'Не вказано')    # Змінено з 'address'
 
-    
+
     # Розраховуємо загальну суму
     total_price = sum(float(item['price']) * int(item['quantity']) for item in basket_items)
     amount_kopiyky = int(total_price * 100)  # Конвертуємо в копійки
@@ -240,6 +241,7 @@ async def verify_payment(update: Update, context: CallbackContext) -> None:
 Дякуємо за замовлення!
 """
             await query.message.reply_text(message)
+            await bonus.update_status_after_purchase(query.from_user.id, order.get('total_price', 0), context)
             
             # Отримуємо email користувача з бази даних
             user = users.find_one({"user_id": query.from_user.id})

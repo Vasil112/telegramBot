@@ -4,6 +4,7 @@ from telegram import Update
 from telegram.ext import CallbackContext
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup 
 import services
+import bonus
 
 from dotenv import load_dotenv
 import os
@@ -34,7 +35,8 @@ async def view_basket(update: Update, context: CallbackContext) -> None:
         product_name = item['product_name']
         quantity = item['quantity']
         price = item['price']
-        total_price += int(price) * quantity
+        total_price = sum(float(item['price']) * int(item['quantity']) for item in basket_items)
+        total_price = bonus.apply_discount(user_id, total_price)
         message += f"📦 {product_name}\nКількість: {quantity}\nЦіна: {price} грн\n\n"
 
         # Додаємо кнопку "Видалити" для кожного товару

@@ -8,6 +8,7 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from basket import basket
+import bonus
 
 from dotenv import load_dotenv
 import os
@@ -72,8 +73,13 @@ async def account(update: Update, context: CallbackContext) -> None:
             [InlineKeyboardButton("Вихід", callback_data='logout')]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
+        status_info = bonus.get_status_info(user.get('status_user', 0))
         await update.message.reply_text(
-            f"Інформація про ваш акаунт:\nЛогін: {user['login']}\nEmail: {user['email']}\n"
+            f"Інформація про ваш акаунт:\n"
+            f"Логін: {user['login']}\n"
+            f"Email: {user['email']}\n"
+            f"Статус: {status_info['level'].capitalize()} ({status_info['discount']}% знижки)\n"
+            f"Витрачено: {user.get('status_user', 0)} грн\n"
             f"Кількість товарів у кошику: {user['basket']}\n",
             reply_markup=reply_markup
         )
