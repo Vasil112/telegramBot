@@ -179,6 +179,22 @@ async def complete_order(update: Update, context: CallbackContext) -> None:
         )
         return
     
+    # Розраховуємо загальну суму
+    total_price = sum(float(item['price']) * int(item.get('quantity', 1)) for item in basket_items)
+    
+    # Застосовуємо знижку
+    discounted_price = bonus.apply_discount(user_id, total_price)
+    user = users.find_one({"user_id": user_id})
+    discount_percent = user.get('user_discount', 0) if user else 0
+
+    # Надсилаємо повідомлення про знижку перед завершенням замовлення
+    await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text=f"💎 Ваша знижка: {discount_percent}%\n"
+             f"💰 Початкова сума: {total_price} грн\n"
+             f"💳 Сума до оплати зі знижкою: {discounted_price} грн"
+    )
+    
     # Оновлюємо кількість товарів у базі даних
     client = MongoClient(os.getenv("MONGO_URI"))
     db_goods = client['goods']
@@ -209,16 +225,16 @@ async def complete_order(update: Update, context: CallbackContext) -> None:
         "phone": context.user_data.get('order_phone', ''),
         "payment_method": context.user_data.get('payment_method', ''),
         "status": "Нове",
-        "order_date": datetime.now()
+        "order_date": datetime.now(),
+        "original_price": total_price,
+        "total_price": discounted_price
     }
     
-    # Розраховуємо загальну суму
-    total_price = sum(float(item['price']) * int(item.get('quantity', 1)) for item in order_data['items'])
-    order_data['total_price'] = total_price
+    # Зберігаємо замовлення та одразу отримуємо його ID
+    order_id = orders.insert_one(order_data).inserted_id
     
-    # Зберігаємо замовлення
-    order = orders.insert_one(order_data)
-    order_id = order.inserted_id
+    # Отримуємо повний документ замовлення для відображення
+    order = orders.find_one({"_id": order_id})
     
     # Очищаємо кошик
     basket.delete_many({"user_id": user_id})
@@ -229,11 +245,12 @@ async def complete_order(update: Update, context: CallbackContext) -> None:
         text=f"""✅ Замовлення оформлено!
         
 📋 Деталі замовлення:
-👤 ПІБ: {order_data['full_name']}
-📞 Телефон: {order_data['phone']}
-🏠 Адреса: {order_data['address']}
-💳 Спосіб оплати: {order_data['payment_method']}
-💰 Загальна сума: {total_price} грн
+👤 ПІБ: {order['full_name']}
+📞 Телефон: {order['phone']}
+🏠 Адреса: {order['address']}
+💳 Спосіб оплати: {order['payment_method']}
+💰 Початкова сума: {order['original_price']} грн
+💰 Загальна сума зі знижкою: {order['total_price']} грн
 
 Дякуємо за замовлення!"""
     )
@@ -261,7 +278,7 @@ async def complete_order(update: Update, context: CallbackContext) -> None:
     
     # Очищаємо тимчасові дані
     context.user_data.clear()
-    await bonus.update_status_after_purchase(user_id, total_price, context)
+    await bonus.update_status_after_purchase(user_id, order['total_price'], context)
 
 
 

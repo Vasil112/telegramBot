@@ -9,7 +9,7 @@ import os
 from bson import ObjectId
 import spam
 import bonus
-
+from bonus import apply_discount
 from dotenv import load_dotenv
 import os
 load_dotenv()  # Завантажує змінні з .env
@@ -42,34 +42,44 @@ async def handle_monobank_payment(update: Update, context: CallbackContext) -> N
         return
     
     # Отримуємо дані користувача з context.user_data
-    full_name = context.user_data.get('order_full_name', 'Не вказано')  # Змінено з 'full_name'
-    phone = context.user_data.get('order_phone', 'Не вказано')        # Змінено з 'phone'
-    address = context.user_data.get('order_address', 'Не вказано')    # Змінено з 'address'
-
+    full_name = context.user_data.get('order_full_name', 'Не вказано')
+    phone = context.user_data.get('order_phone', 'Не вказано')
+    address = context.user_data.get('order_address', 'Не вказано')
 
     # Розраховуємо загальну суму
     total_price = sum(float(item['price']) * int(item['quantity']) for item in basket_items)
-    amount_kopiyky = int(total_price * 100)  # Конвертуємо в копійки
+    
+    # Застосовуємо знижку на основі статусу користувача
+    discounted_price = apply_discount(user_id, total_price)
+    user = users.find_one({"user_id": user_id})
+    discount_percent = user.get('user_discount', 0) if user else 0
+    
+    # Зберігаємо оригінальну та знижену ціну
+    context.user_data['original_price'] = total_price
+    context.user_data['discounted_price'] = discounted_price
+    
+    amount_kopiyky = int(discounted_price * 100)  # Конвертуємо в копійки
     
     if amount_kopiyky < 100:
         await query.message.reply_text("Мінімальна сума оплати - 1 грн")
         return
     
-    # 1️⃣ Спочатку створюємо замовлення
+    # Створюємо замовлення з урахуванням знижки
     order_data = {
         "user_id": user_id,
         "full_name": full_name,
         "phone": phone,
         "address": address,
         "items": basket_items,
-        "total_price": total_price,
+        "original_price": total_price,
+        "total_price": discounted_price,
         "status": "Очікує оплати",
         "payment_method": "Monobank",
         "created_at": datetime.now()
     }
     order = orders.insert_one(order_data)
-    order_id = order.inserted_id  # Отримуємо ID нового замовлення
-        
+    order_id = order.inserted_id
+            
     # Створюємо інвойс в Monobank
     invoice_data = {
         "amount": amount_kopiyky,
@@ -98,7 +108,9 @@ async def handle_monobank_payment(update: Update, context: CallbackContext) -> N
             "user_id": user_id,
             "payment_id": invoice_info['invoiceId'],
             "order_id": order_id,  # Додаємо ID замовлення
-            "amount": total_price,
+            "amount": discounted_price,  # Зберігаємо суму зі знижкою
+            "original_amount": total_price,  # Зберігаємо оригінальну суму
+            "discount_percent": discount_percent,  # Зберігаємо відсоток знижки
             "status": "pending",
             "created_at": datetime.now(),
             "monobank_data": invoice_info,
@@ -107,11 +119,13 @@ async def handle_monobank_payment(update: Update, context: CallbackContext) -> N
         }
         payments.insert_one(payment_record)
 
-        # Відправляємо повідомлення з реквізитами
+        # Відправляємо повідомлення з реквізитами (додано інформацію про знижку)
         message = f"""
 💳 *Оплата через Monobank*
 
-💰 *Сума до оплати:* {total_price} грн
+💰 *Початкова сума:* {total_price} грн
+💎 *Ваша знижка:* {discount_percent}%
+💰 *Сума до оплати зі знижкою:* {discounted_price} грн
 📋 *Призначення платежу:* {payment_record['order_reference']}
 
 Для оплати перейдіть за посиланням:
@@ -147,6 +161,7 @@ async def handle_monobank_payment(update: Update, context: CallbackContext) -> N
         print(f"Неочікувана помилка: {str(e)}")
         await query.message.reply_text("❌ Сталася неочікувана помилка. Спробуйте ще раз або зверніться до підтримки.")
 
+        
 async def verify_payment(update: Update, context: CallbackContext) -> None:
     query = update.callback_query
     await query.answer()
@@ -228,6 +243,7 @@ async def verify_payment(update: Update, context: CallbackContext) -> None:
             
             # Відправляємо підтвердження
             order = orders.find_one({"_id": ObjectId(payment['order_id'])})
+            user = users.find_one({"user_id": query.from_user.id})
             message = f"""
 ✅ Замовлення оформлено!
 
@@ -236,7 +252,9 @@ async def verify_payment(update: Update, context: CallbackContext) -> None:
 📞 Телефон: {order.get('phone', 'Не вказано')}
 🏠 Адреса: {order.get('address', 'Не вказано')}
 💳 Спосіб оплати: {order.get('payment_method', 'Monobank')}
-💰 Загальна сума: {order.get('total_price', 0)} грн
+💰 Початкова сума: {order.get('original_price', 0)} грн
+💎 Ваша знижка: {user.get('user_discount', 0)}%
+💰 Загальна сума зі знижкою: {order.get('total_price', 0)} грн
 
 Дякуємо за замовлення!
 """
@@ -287,19 +305,34 @@ async def verify_payment(update: Update, context: CallbackContext) -> None:
 
 
 async def payment_instructions(update: Update, context: CallbackContext) -> None:
+    print(">>> Інструкція requested")  # Додаємо логування
     query = update.callback_query
-    await query.answer()
-
-    await query.message.reply_text(
-        "📌 Інструкція з оплати:\n\n"
-        "1. Перейдіть за посиланням для оплати\n"
-        "2. Увійдіть у свій Monobank або виберіть інший спосіб оплати\n"
-        "3. Підтвердіть платіж\n"
-        "4. Поверніться до чату та натисніть 'Підтвердити оплату'\n\n"
-        "Якщо виникли проблеми, зверніться до підтримки."
-    )
+    try:
+        await query.answer()
+        print(">>> Callback answered")
+        
+        await context.bot.send_message(
+            chat_id=query.message.chat_id,
+            text="📌 Тестова інструкція - функція працює!",
+            parse_mode="HTML"
+        )
+        print(">>> Повідомлення відправлено")
+    except Exception as e:
+        print(f">>> Помилка: {str(e)}")
 
 def setup_handlers(application):
-    application.add_handler(CallbackQueryHandler(handle_monobank_payment, pattern="^payment_prepay$"))
-    application.add_handler(CallbackQueryHandler(verify_payment, pattern="^verify_payment_"))
-    application.add_handler(CallbackQueryHandler(payment_instructions, pattern="^payment_instructions$"))
+    # Реєструємо обробник інструкцій окремо з більш конкретним шаблоном
+    application.add_handler(CallbackQueryHandler(
+        payment_instructions, 
+        pattern=r"^payment_instructions$"
+    ))
+    
+    # Інші обробники
+    application.add_handler(CallbackQueryHandler(
+        handle_monobank_payment, 
+        pattern="^payment_prepay$"
+    ))
+    application.add_handler(CallbackQueryHandler(
+        verify_payment, 
+        pattern="^verify_payment_"
+    ))
