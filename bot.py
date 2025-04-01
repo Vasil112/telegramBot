@@ -9,6 +9,7 @@ import services  # Імпортуємо модуль services
 import history  # Імпортуємо модуль history
 import oplata # Імпортуємо модуль oplata
 import address  # Імпортуємо модуль address
+import keyboard_buttons  # Імпортуємо модуль keyboard_buttons
 from pymongo import MongoClient
 from gridfs import GridFS
 from bson import ObjectId
@@ -38,6 +39,7 @@ def clear_user_data(context: CallbackContext):
 async def start(update: Update, context: CallbackContext) -> None:
     clear_user_data(context)
     await update.message.reply_text('Привіт, я бот, який допоможе тобі обрати смартфон')
+    await keyboard_buttons.show_main_keyboard(update, context)
     keyboard = [
         [InlineKeyboardButton("📱 Смартфони", callback_data='smartphones')],
         [InlineKeyboardButton("📞 Телефони", callback_data='phones')],
@@ -207,6 +209,7 @@ def main() -> None:
         .persistence(persistence) \
         .build()
     
+    keyboard_buttons.setup_handlers(application)
 
     # Додаємо обробники команд
     application.add_handler(CommandHandler("start", start))
