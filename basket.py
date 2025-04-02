@@ -20,14 +20,21 @@ db_goods = client['goods']
 __all__ = ['basket', 'users', 'db_goods', 'view_basket', 'handle_delete_from_cart', 'handle_add_to_cart', 'handle_place_order', 'handle_order_confirmation', 'services']
 
 async def view_basket(update: Update, context: CallbackContext) -> None:
-    user_id = update.callback_query.from_user.id
+    # Отримуємо user_id з callback_query або з message
+    if update.callback_query:
+        user_id = update.callback_query.from_user.id
+        message = update.callback_query.message
+    else:
+        user_id = update.message.from_user.id
+        message = update.message
+
     basket_items = list(basket.find({"user_id": user_id}))
 
     if not basket_items:
-        await update.callback_query.message.reply_text("Ваш кошик порожній.")
+        await message.reply_text("Ваш кошик порожній.")
         return
 
-    message = "Ваш кошик:\n\n"
+    message_text = "Ваш кошик:\n\n"
     total_price = 0
     keyboard = []
 
@@ -37,21 +44,22 @@ async def view_basket(update: Update, context: CallbackContext) -> None:
         price = item['price']
         total_price = sum(float(item['price']) * int(item['quantity']) for item in basket_items)
         total_price = bonus.apply_discount(user_id, total_price)
-        message += f"📦 {product_name}\nКількість: {quantity}\nЦіна: {price} грн\n\n"
+        message_text += f"📦 {product_name}\nКількість: {quantity}\nЦіна: {price} грн\n\n"
 
         # Додаємо кнопку "Видалити" для кожного товару
         delete_button = InlineKeyboardButton(f"Видалити {product_name}", callback_data=f"delete_item_{item['_id']}")
         keyboard.append([delete_button])
 
-    message += f"Загальна сума: {total_price} грн"
+    message_text += f"Загальна сума: {total_price} грн"
 
     # Додаємо кнопку "До замовлення"
     order_button = InlineKeyboardButton("До замовлення", callback_data="place_order")
     keyboard.append([order_button])
 
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.callback_query.message.reply_text(message, reply_markup=reply_markup)
+    await message.reply_text(message_text, reply_markup=reply_markup)
     
+        
 async def handle_delete_from_cart(update: Update, context: CallbackContext, item_id: str) -> None:
     query = update.callback_query
     await query.answer()

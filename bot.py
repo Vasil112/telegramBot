@@ -39,16 +39,8 @@ def clear_user_data(context: CallbackContext):
 async def start(update: Update, context: CallbackContext) -> None:
     clear_user_data(context)
     await update.message.reply_text('Привіт, я бот, який допоможе тобі обрати смартфон')
-    await keyboard_buttons.show_main_keyboard(update, context)
-    keyboard = [
-        [InlineKeyboardButton("📱 Смартфони", callback_data='smartphones')],
-        [InlineKeyboardButton("📞 Телефони", callback_data='phones')],
-        [InlineKeyboardButton("🍏 IPhone", callback_data='iphone')],
-        [InlineKeyboardButton("⌚ Годинники", callback_data='watches')],
-        [InlineKeyboardButton("🎧 Аксесуари", callback_data='accessories')]
-    ]
-    category_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text('Обери категорію:', reply_markup=category_markup)
+    await keyboard_buttons.show_main_keyboard(update, context)  # Тільки головна клавіатура
+
 
 async def help(update: Update, context: CallbackContext) -> None:
     clear_user_data(context)
@@ -75,6 +67,7 @@ async def catalog(update: Update, context: CallbackContext) -> None:
 async def stop(update: Update, context: CallbackContext) -> None:
     clear_user_data(context)
     await update.message.reply_text("Всі поточні дії скасовано. Ви можете почати знову.")
+    await keyboard_buttons.show_main_keyboard(update, context)  # Додано показ головної клавіатури
 
 async def status(update: Update, context: CallbackContext) -> None:
     # Використовуємо функцію з модуля admin

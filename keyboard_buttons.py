@@ -25,13 +25,26 @@ users = db_security['users']
 
 async def show_main_keyboard(update: Update, context: CallbackContext) -> None:
     """Показує головну клавіатуру з основними кнопками"""
-    keyboard = [
-        ["📋 Каталог", "👤 Акаунт"],
-        ["🛒 Кошик", "❓ Допомога"],
-        ["🛑 СТОП"]
-    ]
-    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+    user_id = update.message.from_user.id
+    user = users.find_one({"user_id": user_id})
     
+    # Якщо користувач є адміністратором, додаємо кнопку "Адміністрування"
+    if user and user.get('access_level') == 'admin':
+        keyboard = [
+            ["📋 Каталог", "👤 Акаунт"],
+            ["🛒 Кошик", "❓ Допомога"],
+            ["🛑 СТОП", "⚙ Адміністрування"]
+        ]
+    else:
+        keyboard = [
+            ["📋 Каталог", "👤 Акаунт"],
+            ["🛒 Кошик", "❓ Допомога"],
+            ["🛑 СТОП"]
+        ]
+    
+    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+    await update.message.reply_text("Оберіть опцію:", reply_markup=reply_markup)
+
 async def handle_keyboard_buttons(update: Update, context: CallbackContext) -> None:
     """Обробляє натискання кнопок головного меню"""
     logger.info(f"Отримано повідомлення: {update.message.text}")
@@ -52,8 +65,17 @@ async def handle_keyboard_buttons(update: Update, context: CallbackContext) -> N
     elif text == "🛑 СТОП":
         logger.info("Обробка кнопки СТОП")
         await stop_actions(update, context)
+    elif text == "⚙ Адміністрування":
+        logger.info("Обробка кнопки Адміністрування")
+        await show_admin_panel(update, context)
     else:
         logger.warning(f"Невідома команда: {text}")
+
+async def show_admin_panel(update: Update, context: CallbackContext) -> None:
+    """Показує панель адміністратора"""
+    # Використовуємо команду /status, яка вже реалізована для адміністраторів
+    from bot import status
+    await status(update, context)
 
 async def show_catalog(update: Update, context: CallbackContext) -> None:
     """Показує каталог товарів"""
@@ -82,8 +104,10 @@ async def show_help(update: Update, context: CallbackContext) -> None:
         "📋 Каталог - перегляд доступних товарів\n"
         "👤 Акаунт - перегляд та редагування профілю\n"
         "🛒 Кошик - перегляд та оформлення замовлення\n"
-        "🛑 СТОП - скасування поточних дій\n\n"
-        "Для початку роботи використовуйте /start"
+        "🛑 СТОП - скасування поточних дій\n"
+        "⚙ Адміністрування - панель управління для адміністраторів\n\n"
+        "Для початку роботи використовуйте /start\n\n\n"
+        "🛠️ Якщо у вас виникли проблеми, зверніться до адміністратора. @Vasil_112"
     )
     await update.message.reply_text(help_text)
 
@@ -91,21 +115,20 @@ async def stop_actions(update: Update, context: CallbackContext) -> None:
     """Скасовує поточні дії та очищає контекст"""
     context.user_data.clear()
     await update.message.reply_text(
-        "Всі поточні дії скасовано. Ви можете почати знову.",
-        reply_markup=ReplyKeyboardRemove()
+        "Всі поточні дії скасовано. Ви можете почати знову."
     )
-    await show_main_keyboard(update, context)
+    await show_main_keyboard(update, context)  # Показуємо головну клавіатуру знову
 
 def setup_handlers(application):
     """Додає обробники для клавіатурних кнопок"""
-    # Змінимо фільтр, щоб він точно ловив наші кнопки
     application.add_handler(MessageHandler(
         filters.TEXT & (
             filters.Regex(r'^📋 Каталог$') |
             filters.Regex(r'^👤 Акаунт$') |
             filters.Regex(r'^🛒 Кошик$') |
             filters.Regex(r'^❓ Допомога$') |
-            filters.Regex(r'^🛑 СТОП$')
+            filters.Regex(r'^🛑 СТОП$') |
+            filters.Regex(r'^⚙ Адміністрування$')
         ),
         handle_keyboard_buttons
     ))
