@@ -84,6 +84,9 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
     if data in ['create_account_yes', 'create_account_no', 'login', 'edit_account', 'logout', 'cancel']:
         await account.handle_account_callback(update, context)
     
+    elif data in ['set_access_admin', 'set_access_user', 'cancel_access_change']:
+        await keyboard_buttons.handle_access_change_buttons(update, context, data)
+    
     # Обробка кнопок для модуля category
     elif data.startswith(('smartphones', 'phones', 'iphone', 'watches', 'accessories', 'next_', 'prev_', 'detail_', 'cart_', 'buy_')):
         await category.handle_category_callback(update, context, db_goods)
@@ -151,6 +154,11 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
     elif data == "payment_prepay":
         await oplata.handle_monobank_payment(update, context)
 
+    elif data.startswith(('add_product', 'delete_product', 'edit_product', 
+                    'category_', 'delete_category_', 'edit_category_',
+                    'admin_back')):
+        await admin.handle_admin_callback(update, context, db_security, db_goods)
+
 
 
 
@@ -160,6 +168,26 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
     if context.user_data.get('awaiting_address'):
         await address.handle_address(update, context)
         return
+    elif context.user_data.get('awaiting_username_for_access'):
+        username = update.message.text
+        # Зберігаємо логін у контексті
+        context.user_data['username_to_change'] = username
+        # Видаляємо прапорець очікування
+        context.user_data.pop('awaiting_username_for_access', None)
+        
+        # Запитуємо новий рівень доступу
+        keyboard = [
+            [InlineKeyboardButton("Зробити Адміністратором (admin)", callback_data='set_access_admin')],
+            [InlineKeyboardButton("Зробити Користувачем (user)", callback_data='set_access_user')],
+            [InlineKeyboardButton("Скасувати", callback_data='cancel_access_change')]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await update.message.reply_text(
+            f"Оберіть новий рівень доступу для користувача **{username}**:",
+            reply_markup=reply_markup,
+            parse_mode="Markdown"
+        )
+        return  # Важливо: припиняємо подальшу обробку
     
     # Перевіряємо, чи очікується PІБ для збереження
     elif context.user_data.get('awaiting_full_name_for_save'):
