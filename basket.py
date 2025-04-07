@@ -8,19 +8,18 @@ import bonus
 
 from dotenv import load_dotenv
 import os
-load_dotenv()  # Завантажує змінні з .env
+load_dotenv() 
 
 # Підключення до MongoDB 
 client = MongoClient(os.getenv("MONGO_URI"))
-db = client['security']  # Використовуємо базу даних security
-basket = db['basket']  # Колекція для кошика
-users = db['users']  # Колекція для користувачів
+db = client['security']  
+basket = db['basket'] 
+users = db['users']  
 db_goods = client['goods']
 
 __all__ = ['basket', 'users', 'db_goods', 'view_basket', 'handle_delete_from_cart', 'handle_add_to_cart', 'handle_place_order', 'handle_order_confirmation', 'services']
 
 async def view_basket(update: Update, context: CallbackContext) -> None:
-    # Отримуємо user_id з callback_query або з message
     if update.callback_query:
         user_id = update.callback_query.from_user.id
         message = update.callback_query.message
@@ -46,13 +45,11 @@ async def view_basket(update: Update, context: CallbackContext) -> None:
         total_price = bonus.apply_discount(user_id, total_price)
         message_text += f"📦 {product_name}\nКількість: {quantity}\nЦіна: {price} грн\n\n"
 
-        # Додаємо кнопку "Видалити" для кожного товару
         delete_button = InlineKeyboardButton(f"Видалити {product_name}", callback_data=f"delete_item_{item['_id']}")
         keyboard.append([delete_button])
 
     message_text += f"Загальна сума: {total_price} грн"
 
-    # Додаємо кнопку "До замовлення"
     order_button = InlineKeyboardButton("До замовлення", callback_data="place_order")
     keyboard.append([order_button])
 
@@ -67,29 +64,24 @@ async def handle_delete_from_cart(update: Update, context: CallbackContext, item
     user_id = query.from_user.id
     
     try:
-        # Перевіряємо, чи item_id містить префікс "delete_item_"
         if item_id.startswith("delete_item_"):
-            item_id = item_id.split("_")[-1]  # Видаляємо префікс
+            item_id = item_id.split("_")[-1] 
             
-        # Перетворюємо рядок у ObjectId
         object_id = ObjectId(item_id)
         
-        # Видаляємо товар з кошика
         result = basket.delete_one({"_id": object_id, "user_id": user_id})
 
         if result.deleted_count > 0:
             await query.message.reply_text("Товар видалено з кошика.")
-            # Оновлюємо кількість товарів у кошику користувача
             user = users.find_one({"user_id": user_id})
             if user:
                 users.update_one(
                     {"user_id": user_id},
-                    {"$inc": {"basket": -1}}  # Зменшуємо кількість товарів у кошику на 1
+                    {"$inc": {"basket": -1}} 
                 )
         else:
             await query.message.reply_text("Не вдалося видалити товар.")
 
-        # Показуємо оновлений кошик
         await view_basket(update, context)
         
     except Exception as e:
@@ -107,7 +99,7 @@ async def handle_add_to_cart(update: Update, context: CallbackContext, product_i
     for category in categories:
         product = db_goods[category].find_one({"_id": ObjectId(product_id)})
         if product:
-            product_category = category  # Зберігаємо категорію товару
+            product_category = category  
             break
 
     if not product:
@@ -119,16 +111,13 @@ async def handle_add_to_cart(update: Update, context: CallbackContext, product_i
     product_price = product.get('price', '0')
     product_quantity_in_stock = int(product['quantity']) if isinstance(product['quantity'], str) else product['quantity']
 
-    # Перевіряємо, чи є достатня кількість товару в наявності
     if product_quantity_in_stock <= 0:
         await update.callback_query.message.reply_text("Товар закінчився.")
         return
 
-    # Перевіряємо, чи товар вже є в кошику користувача
     existing_item = basket.find_one({"user_id": user_id, "product_id": ObjectId(product_id)})
     if existing_item:
-        # Якщо товар вже є в кошику, збільшуємо кількість
-        new_quantity = int(existing_item['quantity']) + 1  # Перетворюємо на int
+        new_quantity = int(existing_item['quantity']) + 1  
         basket.update_one(
             {"_id": existing_item['_id']},
             {"$set": {"quantity": new_quantity}}
@@ -140,21 +129,19 @@ async def handle_add_to_cart(update: Update, context: CallbackContext, product_i
             "user_id": user_id,
             "product_id": ObjectId(product_id),
             "product_name": product_name,
-            "quantity": int(1),  # Переконуємося, що це int
+            "quantity": int(1), 
             "price": int(product_price),
-            "category": product_category  # Додаємо категорію товару
+            "category": product_category 
         })
         await update.callback_query.message.reply_text(f"Товар {product_name} додано до кошика.")
 
-    # Оновлення кількості товарів у кошику користувача
     user = users.find_one({"user_id": user_id})
     if user:
         users.update_one(
             {"user_id": user_id},
-            {"$inc": {"basket": 1}}  # Збільшуємо кількість товарів у кошику на 1
+            {"$inc": {"basket": 1}}  
         )
 
-    # Очищення context.user_data після додавання до кошика
     context.user_data.clear()
 
 async def handle_place_order(update: Update, context: CallbackContext) -> None:
@@ -177,7 +164,6 @@ async def handle_place_order(update: Update, context: CallbackContext) -> None:
 
     message += f"Загальна сума: {total_price} грн\n\nБажаєте продовжити?"
 
-    # Кнопки "Так" і "Ні"
     keyboard = [
         [InlineKeyboardButton("Так", callback_data="confirm_order")],
         [InlineKeyboardButton("Ні", callback_data="cancel_order")]
@@ -192,7 +178,6 @@ async def handle_order_confirmation(update: Update, context: CallbackContext) ->
     data = query.data
 
     if data == "confirm_order":
-        # Пропонуємо сервіс "Full Protection"
         await services.offer_full_protection(update, context)
     elif data == "cancel_order":
         await query.message.reply_text("Операцію скасовано. Товари залишаються у вашому кошику.")

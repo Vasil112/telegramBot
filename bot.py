@@ -1,22 +1,22 @@
 import os
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackContext, MessageHandler, filters, CallbackQueryHandler, PicklePersistence
-import admin  # Імпортуємо модуль admin
-import account  # Імпортуємо модуль account
-import category  # Імпортуємо модуль category
-import basket  # Імпортуємо модуль basket
-import services  # Імпортуємо модуль services
-import history  # Імпортуємо модуль history
-import oplata # Імпортуємо модуль oplata
-import address  # Імпортуємо модуль address
-import keyboard_buttons  # Імпортуємо модуль keyboard_buttons
+import admin 
+import account 
+import category  
+import basket  
+import services  
+import history  
+import oplata 
+import address  
+import keyboard_buttons 
 from pymongo import MongoClient
 from gridfs import GridFS
 from bson import ObjectId
 import bonus
 from dotenv import load_dotenv
 
-load_dotenv() # Завантажує змінні з .env файлу
+load_dotenv() 
 import logging
 
 logging.basicConfig(
@@ -27,19 +27,18 @@ logger = logging.getLogger(__name__)
 
 # Підключення до MongoDB
 client = MongoClient(os.getenv("MONGO_URI"))
-db_security = client['security']  # База даних для користувачів
-db_goods = client['goods']  # База даних для товарів
+db_security = client['security']  
+db_goods = client['goods'] 
 fs = GridFS(db_goods)
-user_addresses = db_security['user_addresses']  # Колекція для адрес користувачів
+user_addresses = db_security['user_addresses'] 
 
-# Функція для очищення context.user_data
 def clear_user_data(context: CallbackContext):
     context.user_data.clear()
 
 async def start(update: Update, context: CallbackContext) -> None:
     clear_user_data(context)
     await update.message.reply_text('Привіт, я бот, який допоможе тобі обрати смартфон')
-    await keyboard_buttons.show_main_keyboard(update, context)  # Тільки головна клавіатура
+    await keyboard_buttons.show_main_keyboard(update, context)  
 
 
 async def help(update: Update, context: CallbackContext) -> None:
@@ -56,7 +55,7 @@ async def catalog(update: Update, context: CallbackContext) -> None:
     message = "Ось наш каталог:\n\n"
 
     for category_name in categories:
-        products = db_goods[category_name].find()  # Використовуємо базу даних goods
+        products = db_goods[category_name].find() 
         message += f"<b>{category_name.capitalize()}</b>\n"
         for product in products:
             message += f"- {product['name']}: {product['description']}\n"
@@ -67,56 +66,45 @@ async def catalog(update: Update, context: CallbackContext) -> None:
 async def stop(update: Update, context: CallbackContext) -> None:
     clear_user_data(context)
     await update.message.reply_text("Всі поточні дії скасовано. Ви можете почати знову.")
-    await keyboard_buttons.show_main_keyboard(update, context)  # Додано показ головної клавіатури
+    await keyboard_buttons.show_main_keyboard(update, context)  
 
 async def status(update: Update, context: CallbackContext) -> None:
-    # Використовуємо функцію з модуля admin
     await admin.status(update, context, db_security, db_goods)
 
-# Функція для обробки CallbackQuery (кнопок)
 async def button_callback(update: Update, context: CallbackContext) -> None:
     query = update.callback_query
     await query.answer()
 
     data = query.data
 
-    # Обробка кнопок для модуля account
     if data in ['create_account_yes', 'create_account_no', 'login', 'edit_account', 'logout', 'cancel']:
         await account.handle_account_callback(update, context)
     
     elif data in ['set_access_admin', 'set_access_user', 'cancel_access_change']:
         await keyboard_buttons.handle_access_change_buttons(update, context, data)
     
-    # Обробка кнопок для модуля category
     elif data.startswith(('smartphones', 'phones', 'iphone', 'watches', 'accessories', 'next_', 'prev_', 'detail_', 'cart_', 'buy_')):
         await category.handle_category_callback(update, context, db_goods)
     
-    # Обробка кнопок для вибору категорії при редагуванні
     elif data.startswith("edit_category_"):
         await admin.handle_category_selection(update, context)
 
-    # Обробка кнопок для модуля admin
     elif data.startswith(('add_product', 'delete_product', 'edit_product', 'category_', 'delete_category_', 'edit_category_')):
         await admin.handle_admin_callback(update, context, db_security, db_goods)
     
-    # Обробка кнопки "Кошик"
     elif data == 'view_basket':
         await basket.view_basket(update, context)
     
-    # Обробка кнопки "Видалити" з кошика
     elif data.startswith("delete_item_"):
         item_id = data
         await basket.handle_delete_from_cart(update, context, item_id)
 
-    # Обробка кнопки "До замовлення"
     elif data == "place_order":
         await basket.handle_place_order(update, context)
     
-    # Обробка підтвердження замовлення
     elif data in ["confirm_order", "cancel_order"]:
         await basket.handle_order_confirmation(update, context)
     
-    # Обробка вибору сервісу "Full Protection"
     elif data.startswith("full_protection_") or data == "no_protection":
         await services.handle_protection_choice(update, context)
     
@@ -164,18 +152,14 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
 
 # Функція для обробки повідомлень
 async def handle_message(update: Update, context: CallbackContext) -> None:
-    # Спочатку перевіряємо, чи очікується адреса
     if context.user_data.get('awaiting_address'):
         await address.handle_address(update, context)
         return
     elif context.user_data.get('awaiting_username_for_access'):
         username = update.message.text
-        # Зберігаємо логін у контексті
         context.user_data['username_to_change'] = username
-        # Видаляємо прапорець очікування
         context.user_data.pop('awaiting_username_for_access', None)
         
-        # Запитуємо новий рівень доступу
         keyboard = [
             [InlineKeyboardButton("Зробити Адміністратором (admin)", callback_data='set_access_admin')],
             [InlineKeyboardButton("Зробити Користувачем (user)", callback_data='set_access_user')],
@@ -187,24 +171,20 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
             reply_markup=reply_markup,
             parse_mode="Markdown"
         )
-        return  # Важливо: припиняємо подальшу обробку
+        return 
     
-    # Перевіряємо, чи очікується PІБ для збереження
     elif context.user_data.get('awaiting_full_name_for_save'):
         await address.handle_full_name_for_save(update, context)
         return
     
-    # Перевіряємо, чи очікується PІБ для замовлення
     elif context.user_data.get('awaiting_full_name'):
         await history.handle_full_name(update, context)
         return
     
-    # Перевіряємо, чи очікується номер телефону для збереження
     elif context.user_data.get('awaiting_phone_for_save'):
         await address.handle_phone_for_save(update, context)
         return
     
-    # Перевіряємо, чи очікується номер телефону для замовлення
     elif context.user_data.get('awaiting_phone'):
         await history.handle_phone_number(update, context)
         return
@@ -217,7 +197,6 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
         await account.handle_message(update, context)
         return
     
-    # Якщо жодна з умов не виконалася, передаємо повідомлення до admin.handle_message
     elif context.user_data.get('admin_action'):
         await admin.handle_message(update, context, db_security, db_goods)
         return
@@ -242,15 +221,12 @@ def main() -> None:
     application.add_handler(CommandHandler("account", account.account))
     application.add_handler(CommandHandler("statuss", bonus.show_status_info))
 
-    # Додаємо обробник для CallbackQuery (кнопок)
     application.add_handler(CallbackQueryHandler(button_callback))
 
-    # Додаємо обробник для повідомлень
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     application.add_handler(MessageHandler(filters.PHOTO, handle_message))
     
 
-    # Додаємо обробники для платежів
     oplata.setup_handlers(application)
     history.setup_handlers(application)
     address.setup_handlers(application)

@@ -10,7 +10,7 @@ import bonus
 
 from dotenv import load_dotenv
 import os
-load_dotenv()  # Завантажує змінні з .env
+load_dotenv() 
 
 # Підключення до MongoDB
 client = MongoClient(os.getenv("MONGO_URI"))
@@ -52,10 +52,8 @@ async def handle_address_selection(update: Update, context: CallbackContext) -> 
         address_id = query.data.split("_")[-1]
         address_data = user_addresses.find_one({"_id": ObjectId(address_id)})
         if address_data:
-            # Зберігаємо адресу
             context.user_data['order_address'] = address_data['address']
             
-            # Якщо в базі вже є ПІБ і телефон, пропонуємо їх використати
             if address_data.get('full_name') and address_data.get('phone'):
                 keyboard = [
                     [InlineKeyboardButton("✅ Використати збережені дані", callback_data="use_saved_data_yes")],
@@ -67,7 +65,6 @@ async def handle_address_selection(update: Update, context: CallbackContext) -> 
                     reply_markup=reply_markup
                 )
                 context.user_data['awaiting_data_decision'] = True
-                # Зберігаємо дані на випадок, якщо користувач обере "Використати"
                 context.user_data['saved_full_name'] = address_data['full_name']
                 context.user_data['saved_phone'] = address_data['phone']
             else:
@@ -81,10 +78,8 @@ async def handle_use_saved_data_decision(update: Update, context: CallbackContex
     await query.answer()
     
     if query.data == "use_saved_data_yes":
-        # Використовуємо збережені дані
         context.user_data['order_full_name'] = context.user_data.get('saved_full_name', '')
         context.user_data['order_phone'] = context.user_data.get('saved_phone', '')
-        # Видаляємо тимчасові дані
         if 'saved_full_name' in context.user_data:
             del context.user_data['saved_full_name']
         if 'saved_phone' in context.user_data:
@@ -162,10 +157,8 @@ async def handle_payment(update: Update, context: CallbackContext) -> None:
     del context.user_data['awaiting_payment']
     
     if payment_method == "payment_prepay":
-        # Для передоплати - переходимо до процесу оплати
         await handle_monobank_payment(update, context)
     else:
-        # Для оплати при отриманні - завершуємо замовлення
         await complete_order(update, context)
 
 async def complete_order(update: Update, context: CallbackContext) -> None:
@@ -199,19 +192,16 @@ async def complete_order(update: Update, context: CallbackContext) -> None:
     client = MongoClient(os.getenv("MONGO_URI"))
     db_goods = client['goods']
     
-    for item in basket_items:
-        # Пропускаємо товари з is_protection=True
+    for item in basket_items:   
         if item.get('is_protection', False):
             continue
             
-        # Додаємо перевірку на наявність обов'язкових полів
         if 'category' not in item or 'product_id' not in item:
             continue
             
         category_name = item['category']
         product_id = item['product_id']
         
-        # Оновлюємо кількість товару
         db_goods[category_name].update_one(
             {"_id": ObjectId(product_id)},
             {"$inc": {"quantity": -int(item.get('quantity', 1))}}
@@ -230,7 +220,6 @@ async def complete_order(update: Update, context: CallbackContext) -> None:
         "total_price": discounted_price
     }
     
-    # Зберігаємо замовлення та одразу отримуємо його ID
     order_id = orders.insert_one(order_data).inserted_id
     
     # Отримуємо повний документ замовлення для відображення
@@ -276,19 +265,16 @@ async def complete_order(update: Update, context: CallbackContext) -> None:
             text="ℹ️ Email не вказано в профілі. Лист з підтвердженням не було надіслано."
         )
     
-    # Очищаємо тимчасові дані
     context.user_data.clear()
     await bonus.update_status_after_purchase(user_id, order['total_price'], context)
 
 
 
 def setup_handlers(application):
-    # Обробники кнопок
     application.add_handler(CallbackQueryHandler(confirm_final_order, pattern="^confirm_final_order$"))
     application.add_handler(CallbackQueryHandler(handle_address_selection, pattern="^select_address_|^add_new_address$"))
     application.add_handler(CallbackQueryHandler(handle_use_saved_data_decision, pattern="^use_saved_data_"))
     application.add_handler(CallbackQueryHandler(handle_payment, pattern="^payment_"))
     
-    # Обробники повідомлень
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r'^[А-ЯҐЄІЇ][а-яґєії]+\s[А-ЯҐЄІЇ][а-яґєії]+\s[А-ЯҐЄІЇ][а-яґєії]+$'), handle_full_name))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r'^\+380\d{9}$'), handle_phone_number))

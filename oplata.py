@@ -12,23 +12,23 @@ import bonus
 from bonus import apply_discount
 from dotenv import load_dotenv
 import os
-load_dotenv()  # Завантажує змінні з .env
+load_dotenv() 
 
-to_date = int(time.time())  # Поточний час
-from_date = to_date - 86400  # Мінус 24 години
+to_date = int(time.time()) 
+from_date = to_date - 86400 
 
 # Підключення до MongoDB
 client = MongoClient(os.getenv("MONGO_URI"))
 db = client['security']
 orders = db['orders']
 payments = db['payments']
-basket_collection = db['basket']  # Перейменуємо, щоб уникнути конфлікту з імпортом модуля
+basket_collection = db['basket'] 
 users = db['users'] 
 
 # Налаштування Monobank API
 MONOBANK_API_URL = "https://api.monobank.ua"
-MONOBANK_MERCHANT_TOKEN = os.getenv("MONOBANK_MERCHANT_TOKEN")  #! Виправлено - використовуємо змінну оточення
-MONOBANK_CARD = os.getenv("MONOBANK_CARD")  # Ваш номер картки Monobank
+MONOBANK_MERCHANT_TOKEN = os.getenv("MONOBANK_MERCHANT_TOKEN")  
+MONOBANK_CARD = os.getenv("MONOBANK_CARD")  
 
 async def handle_monobank_payment(update: Update, context: CallbackContext) -> None:
     query = update.callback_query
@@ -41,30 +41,25 @@ async def handle_monobank_payment(update: Update, context: CallbackContext) -> N
         await query.message.reply_text("Ваш кошик порожній!")
         return
     
-    # Отримуємо дані користувача з context.user_data
     full_name = context.user_data.get('order_full_name', 'Не вказано')
     phone = context.user_data.get('order_phone', 'Не вказано')
     address = context.user_data.get('order_address', 'Не вказано')
 
-    # Розраховуємо загальну суму
     total_price = sum(float(item['price']) * int(item['quantity']) for item in basket_items)
     
-    # Застосовуємо знижку на основі статусу користувача
     discounted_price = apply_discount(user_id, total_price)
     user = users.find_one({"user_id": user_id})
     discount_percent = user.get('user_discount', 0) if user else 0
     
-    # Зберігаємо оригінальну та знижену ціну
     context.user_data['original_price'] = total_price
     context.user_data['discounted_price'] = discounted_price
     
-    amount_kopiyky = int(discounted_price * 100)  # Конвертуємо в копійки
+    amount_kopiyky = int(discounted_price * 100)  
     
     if amount_kopiyky < 100:
         await query.message.reply_text("Мінімальна сума оплати - 1 грн")
         return
     
-    # Створюємо замовлення з урахуванням знижки
     order_data = {
         "user_id": user_id,
         "full_name": full_name,
@@ -90,8 +85,8 @@ async def handle_monobank_payment(update: Update, context: CallbackContext) -> N
             "comment": "Оплата замовлення"
         },
         "redirectUrl": "https://t.me/storeManager_112Bot",  # URL для перенаправлення після оплати
-        "webHookUrl": "https://your-webhook-url.com/monobank",  # URL для отримання статусу
-        "validity": 3600,  # 1 година
+        "webHookUrl": "https://your-webhook-url.com/monobank",  
+        "validity": 3600,  
         "paymentType": "debit"
     }
     
@@ -119,7 +114,6 @@ async def handle_monobank_payment(update: Update, context: CallbackContext) -> N
         }
         payments.insert_one(payment_record)
 
-        # Відправляємо повідомлення з реквізитами (додано інформацію про знижку)
         message = f"""
 💳 *Оплата через Monobank*
 
@@ -189,7 +183,6 @@ async def verify_payment(update: Update, context: CallbackContext) -> None:
         print(f"Статус платежу від Monobank: {status_info}")
         
         if status_info.get('status') == "success":
-            # Оновлюємо статус платежу
             payments.update_one(
                 {"payment_id": payment_id},
                 {"$set": {
@@ -207,11 +200,9 @@ async def verify_payment(update: Update, context: CallbackContext) -> None:
             if order and 'items' in order:
                 for item in order['items']:
                     try:
-                        # Пропускаємо товари з is_protection=True
                         if item.get('is_protection', False):
                             continue
-                            
-                        # Перевіряємо наявність обов'язкових полів
+ 
                         if not all(key in item for key in ['category', 'product_id', 'quantity']):
                             print(f"Попередження: товар має недостатні дані: {item}")
                             continue
@@ -219,7 +210,6 @@ async def verify_payment(update: Update, context: CallbackContext) -> None:
                         category_name = item['category']
                         product_id = item['product_id']
                         
-                        # Оновлюємо кількість товару
                         db_goods[category_name].update_one(
                             {"_id": ObjectId(product_id)},
                             {"$inc": {"quantity": -int(item['quantity'])}}
@@ -228,7 +218,6 @@ async def verify_payment(update: Update, context: CallbackContext) -> None:
                         print(f"Помилка при оновленні товару {item.get('product_id')}: {item_error}")
                         continue
                     
-            # Оновлюємо статус замовлення
             orders.update_one(
                 {"_id": ObjectId(payment['order_id'])},
                 {"$set": {
@@ -238,10 +227,8 @@ async def verify_payment(update: Update, context: CallbackContext) -> None:
                 }}
             )
             
-            # Видаляємо кошик
             basket_collection.delete_many({"user_id": query.from_user.id})
-            
-            # Відправляємо підтвердження
+
             order = orders.find_one({"_id": ObjectId(payment['order_id'])})
             user = users.find_one({"user_id": query.from_user.id})
             message = f"""
@@ -261,7 +248,6 @@ async def verify_payment(update: Update, context: CallbackContext) -> None:
             await query.message.reply_text(message)
             await bonus.update_status_after_purchase(query.from_user.id, order.get('total_price', 0), context)
             
-            # Отримуємо email користувача з бази даних
             user = users.find_one({"user_id": query.from_user.id})
             if user and user.get('email'):
                 try:
@@ -273,7 +259,6 @@ async def verify_payment(update: Update, context: CallbackContext) -> None:
             else:
                 await query.message.reply_text("ℹ️ Email не вказано в профілі. Лист з підтвердженням не було надіслано.")
             
-            # Очищаємо контекст
             context.user_data.clear()
         
         elif status_info.get('status') == "processing":
@@ -305,7 +290,7 @@ async def verify_payment(update: Update, context: CallbackContext) -> None:
 
 
 async def payment_instructions(update: Update, context: CallbackContext) -> None:
-    print(">>> Інструкція requested")  # Додаємо логування
+    print(">>> Інструкція requested") 
     query = update.callback_query
     try:
         await query.answer()
@@ -321,13 +306,11 @@ async def payment_instructions(update: Update, context: CallbackContext) -> None
         print(f">>> Помилка: {str(e)}")
 
 def setup_handlers(application):
-    # Реєструємо обробник інструкцій окремо з більш конкретним шаблоном
     application.add_handler(CallbackQueryHandler(
         payment_instructions, 
         pattern=r"^payment_instructions$"
     ))
     
-    # Інші обробники
     application.add_handler(CallbackQueryHandler(
         handle_monobank_payment, 
         pattern="^payment_prepay$"

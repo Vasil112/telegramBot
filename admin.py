@@ -8,9 +8,8 @@ from gridfs import GridFS
 
 from dotenv import load_dotenv
 import os
-load_dotenv()  # Завантажує змінні з .env
+load_dotenv()  
 
-# Списки характеристик для різних категорій
 SMARTPHONES_CHARACTERISTICS = [
     "Кількість sim-карт", "Стандарти зв'язку", "Діагональ екрану", "Роздільна здатність дисплея",
     "Частота оновлення екрану", "Тип екрану", "Процесор", "Кількість ядер", "Частота процесора",
@@ -40,9 +39,7 @@ WATCHES_CHARACTERISTICS = [
     "Функції", "Спосіб зарядки", "Ємність акумулятора", "Форма", "Матеріал корпуса", "Комплектація", "Гарантійний термін"
 ]
 
-# Функція для обробки команди /status для адміністратора
 async def status(update: Update, context: CallbackContext, db_security: Database, db_goods: Database) -> None:
-    # Отримуємо user_id з update.message або update.callback_query
     if update.message:
         user_id = update.message.from_user.id
     elif update.callback_query:
@@ -51,7 +48,7 @@ async def status(update: Update, context: CallbackContext, db_security: Database
         await update.message.reply_text("Неможливо отримати інформацію про користувача.")
         return
 
-    user = db_security.users.find_one({"user_id": user_id})  # Використовуємо базу даних security для користувачів
+    user = db_security.users.find_one({"user_id": user_id})  
 
     # Перевіряємо, чи користувач вийшов з акаунту
     if context.user_data.get('logged_out', False):
@@ -72,7 +69,6 @@ async def status(update: Update, context: CallbackContext, db_security: Database
     else:
         await update.message.reply_text("У вас немає доступу до цієї команди.")
 
-# Функція для обробки натискання кнопок у /status
 async def handle_admin_callback(update: Update, context: CallbackContext, db_security: Database, db_goods: Database) -> None:
     query = update.callback_query
     await query.answer()
@@ -107,7 +103,6 @@ async def handle_admin_callback(update: Update, context: CallbackContext, db_sec
         context.user_data['admin_action'] = 'delete_product'
         print(f"user_data AFTER delete_product: {context.user_data}")
         
-        # Створюємо нове повідомлення з кнопками категорій
         categories_keyboard = [
             [InlineKeyboardButton("🎧 Аксесуари", callback_data='delete_category_accessories')],
             [InlineKeyboardButton("🍏 IPhone", callback_data='delete_category_iphone')],
@@ -117,7 +112,6 @@ async def handle_admin_callback(update: Update, context: CallbackContext, db_sec
         ]
         reply_markup = InlineKeyboardMarkup(categories_keyboard)
         
-        # Замість редагування існуючого повідомлення, відправляємо нове
         await query.message.reply_text("Оберіть категорію для видалення товару:", reply_markup=reply_markup)
     
     elif query.data.startswith('category_'):
@@ -140,7 +134,7 @@ async def handle_admin_callback(update: Update, context: CallbackContext, db_sec
             await query.edit_message_text(text=f"✅ Ви обрали категорію: {category}\nВведіть назву товару, який потрібно редагувати:")
     
     elif query.data.startswith('delete_category_'):
-        category = query.data.split('_')[2]  # Отримуємо назву категорії
+        category = query.data.split('_')[2]  
         context.user_data.update({
             'category': category,
             'awaiting_product_name_for_delete': True
@@ -149,11 +143,9 @@ async def handle_admin_callback(update: Update, context: CallbackContext, db_sec
     print(f"user_data FINAL: {context.user_data}")
 
 
-
-
 async def start_edit_product(update: Update, context: CallbackContext) -> None:
     query = update.callback_query
-    await query.answer()  # Підтверджуємо отримання callback
+    await query.answer()  
 
     keyboard = [
         [InlineKeyboardButton("🎧 Аксесуари", callback_data='edit_category_accessories')],
@@ -164,7 +156,6 @@ async def start_edit_product(update: Update, context: CallbackContext) -> None:
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    # Використовуємо query.edit_message_text для редагування повідомлення
     await query.edit_message_text("📌 Оберіть категорію товару:", reply_markup=reply_markup)
 
 async def handle_category_selection(update: Update, context: CallbackContext) -> None:
@@ -206,7 +197,7 @@ async def handle_message(update: Update, context: CallbackContext, db_security: 
             'current_step': 'description'
         })
         await update.message.reply_text("Введіть опис товару:")
-        return  # Важливо: завершуємо обробку поточного повідомлення
+        return  
     
     # Отримання опису товару
     elif 'awaiting_product_description' in context.user_data:
@@ -225,10 +216,8 @@ async def handle_message(update: Update, context: CallbackContext, db_security: 
         product_price = update.message.text
         try:
             if product_price == ".":
-                # Якщо користувач ввів крапку, залишаємо попередню ціну
                 context.user_data['product_price'] = int(context.user_data.get('original_product_price', 0))
             else:
-                # Конвертуємо введене значення в ціле число
                 context.user_data['product_price'] = int(product_price)
         except ValueError:
             await update.message.reply_text("Будь ласка, введіть коректну ціну (ціле число):")
@@ -238,22 +227,19 @@ async def handle_message(update: Update, context: CallbackContext, db_security: 
         context.user_data['awaiting_product_quantity'] = True
         del context.user_data['awaiting_product_price']
         
-    # Отримання кількості товару
     elif 'awaiting_product_quantity' in context.user_data:
         product_quantity = update.message.text
         if product_quantity == ".":
-            # Якщо користувач ввів крапку, залишаємо попередню кількість
             context.user_data['product_quantity'] = context.user_data.get('original_product_quantity', 0)
         else:
             context.user_data['product_quantity'] = int(product_quantity) if product_quantity.isdigit() else 0
 
-        # Якщо категорія - аксесуари, пропускаємо характеристики
         if context.user_data['category'] == 'accessories':
             await update.message.reply_text("Тепер надішліть фото товару:")
             context.user_data['awaiting_product_photo'] = True
         else:
-            context.user_data['product_specs'] = {}  # Створюємо словник характеристик
-            context.user_data['current_spec_index'] = 0  # Починаємо з першої характеристики
+            context.user_data['product_specs'] = {}  
+            context.user_data['current_spec_index'] = 0 
 
             # Визначаємо, який список характеристик використовувати
             category = context.user_data['category']
@@ -266,7 +252,7 @@ async def handle_message(update: Update, context: CallbackContext, db_security: 
             elif category == "watches":
                 characteristics_list = WATCHES_CHARACTERISTICS
             else:
-                characteristics_list = []  # Для інших категорій характеристики не потрібні
+                characteristics_list = []  
 
             if characteristics_list:
                 await update.message.reply_text(f"Введіть значення для характеристики: {characteristics_list[0]}")
@@ -276,7 +262,6 @@ async def handle_message(update: Update, context: CallbackContext, db_security: 
                 context.user_data['awaiting_product_photo'] = True
         del context.user_data['awaiting_product_quantity']
     
-    # Отримання характеристик товару по черзі
     elif 'awaiting_product_specs' in context.user_data:
         index = context.user_data['current_spec_index']
         category = context.user_data['category']
@@ -295,7 +280,6 @@ async def handle_message(update: Update, context: CallbackContext, db_security: 
 
         spec_value = update.message.text.strip()
         if spec_value == ".":
-            # Якщо користувач ввів крапку, залишаємо попереднє значення характеристики
             spec_value = context.user_data['product_specs'].get(characteristics_list[index], '')
         
         context.user_data['product_specs'][characteristics_list[index]] = spec_value
@@ -327,9 +311,9 @@ async def handle_message(update: Update, context: CallbackContext, db_security: 
             "name": context.user_data['product_name'],
             "description": context.user_data['product_description'],
             "price": context.user_data['product_price'],
-            "quantity": context.user_data['product_quantity'],  # Додаємо кількість товару
-            "specs": context.user_data.get('product_specs', {}),  # Характеристики (якщо є)
-            "photo_id": photo_id  # Зберігаємо ObjectId фото
+            "quantity": context.user_data['product_quantity'], 
+            "specs": context.user_data.get('product_specs', {}),
+            "photo_id": photo_id 
         }
         category = context.user_data['category']
         db_goods[category].insert_one(product)
@@ -337,7 +321,6 @@ async def handle_message(update: Update, context: CallbackContext, db_security: 
         await update.message.reply_text(f"✅ Товар успішно додано до категорії {category}!\n📸 Фото збережено в базі.")
         context.user_data.clear()
 
-    # Обробка видалення товару за назвою
     elif 'awaiting_product_name_for_delete' in context.user_data:
         product_name = update.message.text
         category = context.user_data.get('category')
@@ -371,14 +354,13 @@ async def handle_message(update: Update, context: CallbackContext, db_security: 
         product = db_goods[category].find_one({"name": product_name})
         
         if product:
-            # Зберігаємо всі оригінальні значення
             context.user_data.update({
                 'original_product_name': product['name'],
                 'original_product_description': product['description'],
                 'original_product_price': product['price'],
                 'original_product_quantity': product['quantity'],
                 'original_product_specs': product.get('specs', {}),
-                'product_name_for_edit': product_name  # Зберігаємо оригінальну назву для пошуку
+                'product_name_for_edit': product_name  
             })
             
             print(f"\n--- DEBUG: ORIGINAL PRODUCT DATA SAVED ---")
@@ -392,11 +374,9 @@ async def handle_message(update: Update, context: CallbackContext, db_security: 
         
         del context.user_data['awaiting_product_name_for_edit']
         
-    # У функції handle_message, де обробляється 'awaiting_new_product_name':
     elif 'awaiting_new_product_name' in context.user_data:
         new_product_name = update.message.text
         if new_product_name == ".":
-            # Використовуємо оригінальну назву, переконуючись, що вона є
             if 'original_product_name' not in context.user_data:
                 await update.message.reply_text("Помилка: оригінальна назва не знайдена. Будь ласка, введіть нову назву:")
                 return
@@ -412,11 +392,9 @@ async def handle_message(update: Update, context: CallbackContext, db_security: 
         context.user_data['awaiting_new_product_description'] = True
         del context.user_data['awaiting_new_product_name']
             
-    # Отримання нового опису товару для редагування
     elif 'awaiting_new_product_description' in context.user_data:
         new_product_description = update.message.text
         if new_product_description == ".":
-            # Використовуємо оригінальний опис
             context.user_data['new_product_description'] = context.user_data.get('original_product_description', '')
         else:
             context.user_data['new_product_description'] = new_product_description
@@ -424,15 +402,12 @@ async def handle_message(update: Update, context: CallbackContext, db_security: 
         context.user_data['awaiting_new_product_price'] = True
         del context.user_data['awaiting_new_product_description']
 
-    # Отримання нової ціни товару для редагування
     elif 'awaiting_new_product_price' in context.user_data:
         new_product_price = update.message.text
         try:
             if new_product_price == ".":
-                # Використовуємо оригінальну ціну
                 context.user_data['new_product_price'] = int(context.user_data.get('original_product_price', 0))
             else:
-                # Конвертуємо введене значення в ціле число
                 context.user_data['new_product_price'] = int(new_product_price)
         except ValueError:
             await update.message.reply_text("Будь ласка, введіть коректну ціну (ціле число):")
@@ -442,20 +417,16 @@ async def handle_message(update: Update, context: CallbackContext, db_security: 
         context.user_data['awaiting_new_product_quantity'] = True
         del context.user_data['awaiting_new_product_price']
             
-    # Отримання нової кількості товару для редагування
     elif 'awaiting_new_product_quantity' in context.user_data:
         new_product_quantity = update.message.text
         if new_product_quantity == ".":
-            # Використовуємо оригінальну кількість
             context.user_data['new_product_quantity'] = context.user_data.get('original_product_quantity', 0)
         else:
             context.user_data['new_product_quantity'] = int(new_product_quantity) if new_product_quantity.isdigit() else 0
 
-        # Оновлюємо товар у базі даних
         category = context.user_data.get('category')
         product_name = context.user_data.get('product_name_for_edit')
 
-        # Переконуємося, що є категорія і назва товару
         if not category or not product_name:
             await update.message.reply_text("❌ Категорія або назва товару не вказані. Будь ласка, спробуйте ще раз.")
             return
@@ -474,7 +445,7 @@ async def handle_message(update: Update, context: CallbackContext, db_security: 
                     "description": context.user_data['new_product_description'],
                     "price": context.user_data['new_product_price'],
                     "quantity": context.user_data['new_product_quantity'],
-                    "specs": context.user_data.get('original_product_specs', {})  # Зберігаємо оригінальні характеристики
+                    "specs": context.user_data.get('original_product_specs', {})  
                 }}
             )
 
@@ -485,7 +456,6 @@ async def handle_message(update: Update, context: CallbackContext, db_security: 
         else:
             await update.message.reply_text("❌ Категорія або назва товару не вказані. Спробуйте ще раз.")
 
-        # Очищаємо context.user_data
         keys_to_delete = [
             'awaiting_new_product_quantity',
             'product_name_for_edit',
@@ -496,11 +466,9 @@ async def handle_message(update: Update, context: CallbackContext, db_security: 
             'original_product_specs'
         ]
 
-        # Перевіряємо, чи змінна keys_to_delete ініціалізована
         if 'keys_to_delete' in locals():
             for key in keys_to_delete:
                 if key in context.user_data:
                     del context.user_data[key]
         else:
-            # Якщо keys_to_delete не ініціалізована, просто очищаємо context.user_data
             context.user_data.clear()

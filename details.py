@@ -8,23 +8,22 @@ from basket import handle_add_to_cart
 
 from dotenv import load_dotenv
 import os
-load_dotenv()  # Завантажує змінні з .env
+load_dotenv() 
 
 # Підключення до MongoDB
 client = MongoClient(os.getenv("MONGO_URI"))
-db_goods = client['goods']  # База даних для товарів
+db_goods = client['goods']  
 db_security = client['security']
 fs = GridFS(db_goods)
 
 async def show_product_details(update: Update, context: CallbackContext, product_id: str, category: str):
-    # Отримуємо товар з відповідної колекції категорії
     product = db_goods[category].find_one({"_id": ObjectId(product_id)})
     if product:
         name = product.get('name', 'Немає інформації')
         price = product.get('price', 'Немає інформації')
         description = product.get('description', 'Немає інформації')
         quantity = product.get('quantity', 'Немає інформації')
-        specs = product.get('specs', {})  # Отримуємо характеристики товару
+        specs = product.get('specs', {})  
 
         # Формуємо основний опис товару з HTML-форматуванням
         caption = (
@@ -34,7 +33,6 @@ async def show_product_details(update: Update, context: CallbackContext, product
             f"📦 <b>У наявності:</b> {quantity}\n\n"
         )
 
-        # Додаємо всі характеристики зі specs
         if specs:
             caption += "<b>Характеристики:</b>\n"
             for key, value in specs.items():
@@ -45,16 +43,13 @@ async def show_product_details(update: Update, context: CallbackContext, product
         if image_id:
             try:
                 image = fs.get(ObjectId(image_id)).read()
-                # Відправка зображення
                 await update.callback_query.message.reply_photo(photo=io.BytesIO(image))
             except Exception as e:
                 print(f"Помилка при отриманні зображення: {e}")
                 await update.callback_query.message.reply_text("Помилка при завантаженні зображення.")
 
-        # Відправка текстового опису з підтримкою HTML-розмітки
         await update.callback_query.message.reply_text(caption, parse_mode="HTML")
 
-        # Отримуємо статус користувача
         user_id = update.callback_query.from_user.id
         user = db_security.users.find_one({"user_id": user_id})
         user_status = user.get('status', 'pasive') if user else 'pasive'
@@ -74,7 +69,6 @@ async def show_product_details(update: Update, context: CallbackContext, product
         reply_markup = InlineKeyboardMarkup(keyboard)
         await update.callback_query.message.reply_text("Оберіть дію:", reply_markup=reply_markup)
 
-        # Обробка натискання кнопок, якщо статус користувача не активний
         if user_status != 'active':
             await update.callback_query.message.reply_text("Для виконання цієї операції спочатку потрібно створити акаунт.")
     else:

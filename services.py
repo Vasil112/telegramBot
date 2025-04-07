@@ -5,7 +5,7 @@ from bson import ObjectId
 
 from dotenv import load_dotenv
 import os
-load_dotenv()  # Завантажує змінні з .env
+load_dotenv()  
 
 client = MongoClient(os.getenv("MONGO_URI"))
 db_security = client['security']
@@ -21,7 +21,6 @@ async def offer_full_protection(update: Update, context: CallbackContext) -> Non
         await continue_order(update, context)
         return
 
-    # Знаходимо всі телефони у кошику
     phone_items = []
     total_phone_price = 0
     
@@ -40,7 +39,6 @@ async def offer_full_protection(update: Update, context: CallbackContext) -> Non
         await continue_order(update, context)
         return
 
-    # Розраховуємо ціни для різних термінів
     price_24 = int(total_phone_price * 0.4)
     price_12 = int(total_phone_price * 0.3)
     price_6 = int(total_phone_price * 0.25)

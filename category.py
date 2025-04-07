@@ -11,20 +11,19 @@ import basket
 
 from dotenv import load_dotenv
 import os
-load_dotenv()  # Завантажує змінні з .env
+load_dotenv() 
 
 # Підключення до MongoDB
 client = MongoClient(os.getenv("MONGO_URI"))
-db_goods = client['goods']  # База даних для товарів
+db_goods = client['goods']
 fs = GridFS(db_goods)
 db_security = client['security']
 
-# Змінна для зберігання поточної сторінки
 current_page = {}
 
 async def show_category(update: Update, context: CallbackContext, category: str):
     user_id = update.callback_query.from_user.id
-    current_page[user_id] = 0  # Починаємо з першої сторінки
+    current_page[user_id] = 0  
 
     await display_products(update, context, category, user_id)
 
@@ -41,8 +40,8 @@ async def display_products(update: Update, context: CallbackContext, category: s
         name = product['name']
         price = product['price']
         description = product['description']
-        specs = product.get('specs', {})  # Отримуємо характеристики товару
-        number = product.get('quantity', 'Немає інформації')  # Кількість у наявності
+        specs = product.get('specs', {}) 
+        number = product.get('quantity', 'Немає інформації') 
 
         # Визначаємо, які характеристики відображати в залежності від категорії
         if category == "smartphones":
@@ -51,7 +50,6 @@ async def display_products(update: Update, context: CallbackContext, category: s
             screen = specs.get('Тип екрану', 'Немає інформації')
             camera = specs.get('Камера', 'Немає інформації')
 
-            # Формуємо підпис для смартфонів
             caption = (
                 f"📱 {name}\n\n"
                 f"💰 Ціна: {price} грн\n\n"
@@ -67,7 +65,6 @@ async def display_products(update: Update, context: CallbackContext, category: s
             camera = specs.get('Камера', 'Немає інформації')
             bluetooth = specs.get('Bluetooth', 'Немає інформації')
 
-            # Формуємо підпис для телефонів
             caption = (
                 f"📱 {name}\n\n"
                 f"💰 Ціна: {price} грн\n\n"
@@ -94,7 +91,6 @@ async def display_products(update: Update, context: CallbackContext, category: s
                 f"📦 У наявності: {number} ✅"
             )
         else:
-            # Для інших категорій (iphone, watches, accessories) відображаємо лише основні дані
             caption = (
                 f"📱 {name}\n\n"
                 f"💰 Ціна: {price} грн\n\n"
@@ -103,13 +99,11 @@ async def display_products(update: Update, context: CallbackContext, category: s
             )
 
         # Отримання зображення з GridFS
-        image_id = product['photo_id']  # Переконайтеся, що поле називається 'photo_id'
+        image_id = product['photo_id']  
         image = fs.get(ObjectId(image_id)).read()
 
-        # Відправка зображення та інформації про товар
         await update.callback_query.message.reply_photo(photo=io.BytesIO(image), caption=caption)
 
-        # Кнопки "Детальніше", "Придбати" та "До кошика" для кожного товару
         keyboard = [
             [InlineKeyboardButton("Детальніше", callback_data=f"detail_{product_id}_{category}"),
              InlineKeyboardButton("Придбати", callback_data=f"buy_{product_id}")],
@@ -118,7 +112,6 @@ async def display_products(update: Update, context: CallbackContext, category: s
         reply_markup = InlineKeyboardMarkup(keyboard)
         await update.callback_query.message.reply_text("Оберіть дію:", reply_markup=reply_markup)
 
-    # Кнопки "Назад" та "Далі" для навігації по сторінках
     keyboard = []
     if page > 0:
         keyboard.append(InlineKeyboardButton("◀️ Назад", callback_data=f"prev_{category}"))
@@ -137,7 +130,6 @@ async def handle_category_callback(update: Update, context: CallbackContext, db_
     user = db_security.users.find_one({"user_id": user_id})
     user_status = user.get('status', 'pasive') if user else 'pasive'
 
-    # Перевіряємо, чи callback_data стосується категорій
     if data in ["accessories", "iphone", "phones", "smartphones", "watches"]:
         await show_category(update, context, data)
     elif data.startswith("next_"):
@@ -150,14 +142,12 @@ async def handle_category_callback(update: Update, context: CallbackContext, db_
         await display_products(update, context, category, user_id)
     elif data.startswith("detail_"):
         product_id = data.split("_")[1]
-        category = data.split("_")[2]  # Отримуємо категорію з callback_data
+        category = data.split("_")[2]  
         await details.show_product_details(update, context, product_id, category)
     elif data.startswith("buy_"):
         if user_status == 'active':
             product_id = data.split("_")[1]
-            # Додаємо товар до кошика
             await basket.handle_add_to_cart(update, context, product_id)
-            # Показуємо меню підтвердження замовлення
             await basket.handle_place_order(update, context)
         else:
             await query.message.reply_text("Для виконання цієї операції спочатку потрібно створити акаунт.")
@@ -168,5 +158,4 @@ async def handle_category_callback(update: Update, context: CallbackContext, db_
         else:
             await query.message.reply_text("Для виконання цієї операції спочатку потрібно створити акаунт.")
     else:
-        # Якщо це не категорія, next_, prev_, detail_, buy_ чи cart_, ігноруємо
         pass

@@ -69,7 +69,7 @@ async def account(update: Update, context: CallbackContext) -> None:
         keyboard = [
             [InlineKeyboardButton("Редагувати", callback_data='edit_account')],
             [InlineKeyboardButton("Кошик", callback_data='view_basket')],
-            [InlineKeyboardButton("Адреса", callback_data='manage_address')],  # Нова кнопка
+            [InlineKeyboardButton("Адреса", callback_data='manage_address')],  
             [InlineKeyboardButton("Вихід", callback_data='logout')]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -126,7 +126,7 @@ async def handle_account_callback(update: Update, context: CallbackContext) -> N
             await view_basket(update, context)
         elif query.data == 'manage_address':
             await handle_manage_address(update, context)
-        elif query.data == 'add_new_address':  # Додано обробник для кнопки "Додати адресу"
+        elif query.data == 'add_new_address':  
             await query.message.reply_text("Введіть нову адресу доставки:")
             context.user_data['order_flow'] = 'awaiting_address'
     except Exception as e:
@@ -177,7 +177,7 @@ async def view_basket(update: Update, context: CallbackContext) -> None:
 
 async def handle_message(update: Update, context: CallbackContext) -> None:
     user_id = update.message.from_user.id
-    chat_id = update.message.chat_id  # Отримуємо chat_id користувача
+    chat_id = update.message.chat_id 
 
     if 'awaiting_login' in context.user_data:
         # Користувач ввів логін

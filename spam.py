@@ -9,7 +9,6 @@ import os
 from dotenv import load_dotenv
 import logging
 
-# Налаштування логування
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -18,23 +17,20 @@ logger = logging.getLogger(__name__)
 
 load_dotenv()
 
-# Підключення до MongoDB
 client = MongoClient(os.getenv("MONGO_URI"))
 db = client['security']
 orders = db['orders']
 users = db['users']
 
-# Налаштування email (використовуємо змінні з .env)
 SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
 SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
 SMTP_USERNAME = os.getenv("EMAIL_ADDRESS")
-SMTP_PASSWORD = os.getenv("EMAIL_PASSWORD")  # Змінено з SMTP_PASSWORD на EMAIL_PASSWORD
+SMTP_PASSWORD = os.getenv("EMAIL_PASSWORD")  
 
 async def send_order_confirmation(update: Update, context: CallbackContext, order_id: ObjectId) -> None:
     try:
         logger.info(f"Початок обробки замовлення {order_id}")
         
-        # Отримуємо замовлення
         order = orders.find_one({"_id": order_id})
         if not order:
             error_msg = "❌ Помилка: замовлення не знайдено."
@@ -42,7 +38,6 @@ async def send_order_confirmation(update: Update, context: CallbackContext, orde
             await update.effective_message.reply_text(error_msg)
             return
 
-        # Отримуємо користувача
         user = users.find_one({"user_id": order["user_id"]})
         if not user:
             error_msg = "❌ Помилка: користувач не знайдений."
@@ -59,20 +54,16 @@ async def send_order_confirmation(update: Update, context: CallbackContext, orde
 
         logger.info(f"Готуємо лист для {user_email}")
 
-        # Готуємо лист
         items_text = "\n".join(
             f"- {item.get('product_name', item.get('name', 'Товар без назви'))} ({item.get('quantity', 1)} шт.) - {float(item.get('price', 0)) * int(item.get('quantity', 1))} грн"
             for item in order["items"]
         )
 
-        # Перевіряємо наявність товарів
         if not order.get("items"):
             error_msg = "❌ Помилка: у замовленні відсутні товари."
             logger.error(error_msg)
             await update.effective_message.reply_text(error_msg)
             return
-
-
 
         email_body = f"""
         <html>

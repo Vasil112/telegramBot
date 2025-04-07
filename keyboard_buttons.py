@@ -92,8 +92,7 @@ async def show_admin_products(update: Update, context: CallbackContext) -> None:
         [InlineKeyboardButton("🔙 Назад", callback_data='admin_back')]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    # Використовуємо edit_message_text якщо це callback, інакше reply_text
+
     if update.callback_query:
         await update.callback_query.edit_message_text("Управління товарами:", reply_markup=reply_markup)
     else:
@@ -171,7 +170,6 @@ async def handle_add_product(update: Update, context: CallbackContext) -> None:
     query = update.callback_query
     await query.answer()
     
-    # Очищаємо попередні дані
     context.user_data.clear()
     context.user_data['admin_action'] = 'add_product'
     
@@ -192,8 +190,7 @@ async def handle_delete_product(update: Update, context: CallbackContext) -> Non
     """Обробка видалення товару"""
     query = update.callback_query
     await query.answer()
-    
-    # Очищаємо попередні дані
+
     context.user_data.clear()
     context.user_data['admin_action'] = 'delete_product'
     
@@ -214,7 +211,6 @@ async def handle_edit_product(update: Update, context: CallbackContext) -> None:
     query = update.callback_query
     await query.answer()
     
-    # Очищаємо попередні дані
     context.user_data.clear()
     context.user_data['admin_action'] = 'edit_product'
     
@@ -246,7 +242,6 @@ async def handle_access_change_buttons(update: Update, context: CallbackContext,
     # Визначаємо новий рівень доступу
     new_access = "admin" if action == 'set_access_admin' else "user"
     
-    # Оновлюємо запис у MongoDB
     result = db_security.users.update_one(
         {"login": username},
         {"$set": {"access_level": new_access}}
@@ -263,7 +258,6 @@ async def handle_access_change_buttons(update: Update, context: CallbackContext,
             parse_mode="Markdown"
         )
     
-    # Очищаємо тимчасові дані
     context.user_data.pop('username_to_change', None)
     
 async def handle_list_users(update: Update, context: CallbackContext) -> None:
@@ -285,7 +279,6 @@ async def handle_change_status(update: Update, context: CallbackContext) -> None
     query = update.callback_query
     await query.answer()
     await query.edit_message_text("✏️ Введіть логін користувача, якому потрібно змінити рівень доступу:")
-    # Встановлюємо прапорець, що очікуємо логін
     context.user_data['awaiting_username_for_access'] = True
 
 async def handle_block_user(update: Update, context: CallbackContext) -> None:
@@ -316,5 +309,3 @@ def setup_handlers(application):
         handle_admin_buttons,
         pattern=r'^(add_product|delete_product|edit_product|list_users|change_status|block_user|admin_back)$'
     ))
-
-

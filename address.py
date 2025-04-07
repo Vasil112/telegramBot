@@ -4,7 +4,7 @@ from pymongo import MongoClient
 from bson import ObjectId
 from datetime import datetime
 import re
-import history  # Додати на початку файлу
+import history
 from dotenv import load_dotenv
 import os
 load_dotenv()

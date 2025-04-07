@@ -39,7 +39,6 @@ async def update_user_status(user_id):
     total_spent = sum(float(order.get('total_price', 0)) for order in user_orders 
                   if order.get('status') not in ["Скасовано", "canceled"])
     
-    # Отримуємо поточний статус
     status_info = get_status_info(total_spent)
     
     # Оновлюємо запис користувача
@@ -65,7 +64,7 @@ async def show_status_info(update: Update, context: CallbackContext):
     
     # Оновлюємо статус перед показом
     status_info = await update_user_status(user_id)
-    user = users.find_one({"user_id": user_id})  # Отримуємо оновлені дані
+    user = users.find_one({"user_id": user_id}) 
     
     # Визначаємо прогрес до наступного статусу
     next_status = None
@@ -110,8 +109,6 @@ def apply_discount(user_id, total_price):
     return total_price
 
 async def update_status_after_purchase(user_id, order_amount, context: CallbackContext):
-    """Оновлює статус після успішної покупки"""
-    # Оновлюємо загальний статус користувача
     status_info = await update_user_status(user_id)
     
     # Перевіряємо, чи отримано новий статус
