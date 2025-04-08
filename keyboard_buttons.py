@@ -4,6 +4,7 @@ from pymongo import MongoClient
 from dotenv import load_dotenv
 import os
 import logging
+import search
 
 # Налаштування логування
 logging.basicConfig(
@@ -49,17 +50,12 @@ async def stop_actions(update: Update, context: CallbackContext) -> None:
     await update.message.reply_text("Всі дії скасовано. Головне меню:")
     await show_main_keyboard(update, context)
 
+from search import show_search_button
+
 async def show_catalog(update: Update, context: CallbackContext) -> None:
-    """Показує каталог товарів"""
-    keyboard = [
-        [InlineKeyboardButton("📱 Смартфони", callback_data='smartphones')],
-        [InlineKeyboardButton("📞 Телефони", callback_data='phones')],
-        [InlineKeyboardButton("🍏 IPhone", callback_data='iphone')],
-        [InlineKeyboardButton("⌚ Годинники", callback_data='watches')],
-        [InlineKeyboardButton("🎧 Аксесуари", callback_data='accessories')]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text('Оберіть категорію:', reply_markup=reply_markup)
+    await show_search_button(update, context)
+
+
 
 async def show_account_info(update: Update, context: CallbackContext) -> None:
     """Показує інформацію про акаунт"""
@@ -124,7 +120,7 @@ async def handle_keyboard_buttons(update: Update, context: CallbackContext) -> N
     text = update.message.text
     
     if text == "📋 Каталог":
-        await show_catalog(update, context)
+        await search.show_search_button(update, context)
     elif text == "👤 Акаунт":
         await show_account_info(update, context)
     elif text == "🛒 Кошик":

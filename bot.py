@@ -11,6 +11,7 @@ import oplata
 import address  
 import keyboard_buttons 
 import history_basket
+import search
 from history_basket import setup_handlers as setup_history_handlers
 from pymongo import MongoClient
 from gridfs import GridFS
@@ -213,6 +214,7 @@ def main() -> None:
     
     setup_history_handlers(application)
     keyboard_buttons.setup_handlers(application)
+    search.setup_handlers_search(application)#! потрібно перейменувати
 
     # Додаємо обробники команд
     application.add_handler(CommandHandler("start", start))
