@@ -69,9 +69,11 @@ async def account(update: Update, context: CallbackContext) -> None:
         keyboard = [
             [InlineKeyboardButton("Редагувати", callback_data='edit_account')],
             [InlineKeyboardButton("Кошик", callback_data='view_basket')],
-            [InlineKeyboardButton("Адреса", callback_data='manage_address')],  
+            [InlineKeyboardButton("Адреса", callback_data='manage_address')],
+            [InlineKeyboardButton("🛍 Історія покупок", callback_data='purchase_history')],
             [InlineKeyboardButton("Вихід", callback_data='logout')]
         ]
+
         reply_markup = InlineKeyboardMarkup(keyboard)
         status_info = bonus.get_status_info(user.get('status_user', 0))
         await update.message.reply_text(
@@ -129,6 +131,9 @@ async def handle_account_callback(update: Update, context: CallbackContext) -> N
         elif query.data == 'add_new_address':  
             await query.message.reply_text("Введіть нову адресу доставки:")
             context.user_data['order_flow'] = 'awaiting_address'
+        elif query.data == 'purchase_history':
+            from history_basket import show_purchase_history
+            await show_purchase_history(update, context)
     except Exception as e:
         print(f"Помилка при редагуванні повідомлення: {e}")
         

@@ -10,6 +10,8 @@ import history
 import oplata 
 import address  
 import keyboard_buttons 
+import history_basket
+from history_basket import setup_handlers as setup_history_handlers
 from pymongo import MongoClient
 from gridfs import GridFS
 from bson import ObjectId
@@ -209,6 +211,7 @@ def main() -> None:
         .persistence(persistence) \
         .build()
     
+    setup_history_handlers(application)
     keyboard_buttons.setup_handlers(application)
 
     # Додаємо обробники команд
@@ -226,7 +229,8 @@ def main() -> None:
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     application.add_handler(MessageHandler(filters.PHOTO, handle_message))
     
-
+    
+    history_basket.setup_handlers(application)
     oplata.setup_handlers(application)
     history.setup_handlers(application)
     address.setup_handlers(application)
