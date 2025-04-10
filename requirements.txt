@@ -1,0 +1,5 @@
+python-telegram-bot==20.3
+pymongo==4.5.0
+python-dotenv==1.0.0
+gridfs==0.5.0
+dnspython==2.4.2
