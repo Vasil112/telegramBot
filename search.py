@@ -39,7 +39,7 @@ async def handle_search_callback(update: Update, context: CallbackContext) -> No
 async def search_product(update: Update, context: CallbackContext) -> None:
     """Виконує пошук товару в базі даних"""
     if not context.user_data.get('awaiting_search_query'):
-        return
+        return  # Якщо не очікуємо пошук, просто виходимо
     
     search_query = update.message.text.strip().lower()
     if not search_query:
@@ -110,4 +110,3 @@ async def search_product(update: Update, context: CallbackContext) -> None:
 def setup_handlers_search(application):
     """Налаштовує обробники для пошуку"""
     application.add_handler(CallbackQueryHandler(handle_search_callback, pattern='^search_product$'))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r'^(?!\/).*'), search_product))

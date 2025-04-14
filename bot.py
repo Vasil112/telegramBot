@@ -155,6 +155,10 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
 
 # Функція для обробки повідомлень
 async def handle_message(update: Update, context: CallbackContext) -> None:
+    if context.user_data.get('awaiting_search_query'):
+        await search.search_product(update, context)
+        return
+    
     if context.user_data.get('awaiting_address'):
         await address.handle_address(update, context)
         return
@@ -214,7 +218,8 @@ def main() -> None:
     
     setup_history_handlers(application)
     keyboard_buttons.setup_handlers(application)
-    search.setup_handlers_search(application)#! потрібно перейменувати
+    # Додаємо обробники пошуку
+    application.add_handler(CallbackQueryHandler(search.handle_search_callback, pattern='^search_product$')) #! потрібно перейменувати бо через цю фігню не працюють 
 
     # Додаємо обробники команд
     application.add_handler(CommandHandler("start", start))
