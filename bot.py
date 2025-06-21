@@ -50,7 +50,7 @@ async def help(update: Update, context: CallbackContext) -> None:
 
 async def about(update: Update, context: CallbackContext) -> None:
     clear_user_data(context)
-    await update.message.reply_text("Сайт створений для Кваліфікаційної роботи студента групи 42-ІПЗ Павловича Васися\n")
+    await update.message.reply_text("Бот створений для Кваліфікаційної роботи студента групи 42-ІПЗ Павловича Василя\n")
 
 async def catalog(update: Update, context: CallbackContext) -> None:
     clear_user_data(context)
