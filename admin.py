@@ -418,57 +418,63 @@ async def handle_message(update: Update, context: CallbackContext, db_security: 
         del context.user_data['awaiting_new_product_price']
             
     elif 'awaiting_new_product_quantity' in context.user_data:
-        new_product_quantity = update.message.text
-        if new_product_quantity == ".":
-            context.user_data['new_product_quantity'] = context.user_data.get('original_product_quantity', 0)
-        else:
-            context.user_data['new_product_quantity'] = int(new_product_quantity) if new_product_quantity.isdigit() else 0
+        try:
+            # Обробка кількості товару
+            new_product_quantity = update.message.text
+            if new_product_quantity == ".":
+                context.user_data['new_product_quantity'] = context.user_data.get('original_product_quantity', 0)
+            else:
+                context.user_data['new_product_quantity'] = int(new_product_quantity) if new_product_quantity.isdigit() else 0
 
-        category = context.user_data.get('category')
-        product_name = context.user_data.get('product_name_for_edit')
+            # Отримуємо необхідні дані
+            category = context.user_data.get('category')
+            old_product_name = context.user_data.get('product_name_for_edit')
+            
+            if not category or not old_product_name:
+                await update.message.reply_text("❌ Помилка: не вказано категорію або назву товару")
+                return
 
-        if not category or not product_name:
-            await update.message.reply_text("❌ Категорія або назва товару не вказані. Будь ласка, спробуйте ще раз.")
-            return
+            # Отримуємо оригінальний товар з бази
+            original_product = db_goods[category].find_one({"name": old_product_name})
+            if not original_product:
+                await update.message.reply_text(f"❌ Товар '{old_product_name}' не знайдено")
+                return
 
-        # Перевіряємо, чи товар існує в базі
-        existing_product = db_goods[category].find_one({"name": product_name})
-        if not existing_product:
-            await update.message.reply_text(f"❌ Помилка: товар '{product_name}' не знайдено в категорії {category}.")
-            return
+            # Формуємо повний набір оновлених даних
+            updated_product = {
+                "name": context.user_data.get('new_product_name', original_product['name']),
+                "description": context.user_data.get('new_product_description', original_product['description']),
+                "price": context.user_data.get('new_product_price', original_product['price']),
+                "quantity": context.user_data.get('new_product_quantity', original_product['quantity']),
+                "specs": context.user_data.get('new_product_specs', original_product.get('specs', {})),
+                "photo_id": original_product.get('photo_id')  # Зберігаємо оригінальне фото
+            }
 
-        if category and product_name:
+            # Додатковий debug-вивід
+            print("\n=== DEBUG: FINAL UPDATE DATA ===")
+            print(f"Category: {category}")
+            print(f"Old name: {old_product_name}")
+            print(f"New data: {updated_product}")
+
+            # Оновлюємо товар у базі даних
             result = db_goods[category].update_one(
-                {"name": product_name},
-                {"$set": {
-                    "name": context.user_data['new_product_name'],
-                    "description": context.user_data['new_product_description'],
-                    "price": context.user_data['new_product_price'],
-                    "quantity": context.user_data['new_product_quantity'],
-                    "specs": context.user_data.get('original_product_specs', {})  
-                }}
+                {"name": old_product_name},
+                {"$set": updated_product}
             )
 
-            if result.matched_count > 0:
-                await update.message.reply_text(f"✅ Товар '{product_name}' успішно оновлено в категорії {category}.")
+            if result.modified_count > 0:
+                await update.message.reply_text(f"✅ Товар успішно оновлено!\nНазва: {updated_product['name']}")
+                
+                # Додаткова перевірка: отримуємо оновлений товар з бази
+                updated_in_db = db_goods[category].find_one({"name": updated_product['name']})
+                print("\n=== DEBUG: UPDATED IN DB ===")
+                print(updated_in_db)
             else:
-                await update.message.reply_text(f"❌ Помилка: товар '{product_name}' не знайдено в категорії {category}.")
-        else:
-            await update.message.reply_text("❌ Категорія або назва товару не вказані. Спробуйте ще раз.")
+                await update.message.reply_text("ℹ️ Дані не змінилися")
 
-        keys_to_delete = [
-            'awaiting_new_product_quantity',
-            'product_name_for_edit',
-            'original_product_name',
-            'original_product_description',
-            'original_product_price',
-            'original_product_quantity',
-            'original_product_specs'
-        ]
-
-        if 'keys_to_delete' in locals():
-            for key in keys_to_delete:
-                if key in context.user_data:
-                    del context.user_data[key]
-        else:
+        except Exception as e:
+            await update.message.reply_text(f"❌ Сталася помилка: {str(e)}")
+            print(f"\n!!! ERROR: {str(e)}")
+        finally:
+            # Повністю очищаємо контекст
             context.user_data.clear()
